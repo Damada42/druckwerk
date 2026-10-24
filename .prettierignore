@@ -1,0 +1,7 @@
+node_modules
+dist
+server/data
+server/drizzle
+package-lock.json
+e2e-results
+e2e-report

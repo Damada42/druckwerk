@@ -1,0 +1,720 @@
+import {
+  COST_CATEGORIES,
+  COST_CATEGORY_LABELS,
+  INVOICE_TYPES,
+  INVOICE_TYPE_LABELS,
+  MEMBER_ROLES,
+  MEMBER_ROLE_LABELS,
+  PRIORITIES,
+  PRIORITY_LABELS,
+  PROJECT_STATUSES,
+  PROJECT_STATUS_LABELS,
+  calcPrinterHourly,
+  calcProjectCosts,
+  type ProjectCost,
+  type ProjectFilament,
+  type ProjectMember,
+  type ProjectWithDetails,
+} from '@3dapp/shared';
+import { Camera, FileText, Paperclip, Plus, Trash2 } from 'lucide-react';
+import { useRef, useState, type FormEvent } from 'react';
+import { useInvoices, useList, useSave } from '../api';
+import {
+  Avatar,
+  Button,
+  Card,
+  ColorDot,
+  Empty,
+  ErrorText,
+  Field,
+  Modal,
+  Select,
+  TextArea,
+  TextInput,
+  cx,
+  dateDe,
+  euro,
+  grams,
+} from '../components/ui';
+
+const TABS = ['Allgemein', 'Team', 'Material', 'Zusatzkosten', 'Rechnungen'] as const;
+type Tab = (typeof TABS)[number];
+
+type Draft = Omit<ProjectWithDetails, 'id' | 'createdAt' | 'updatedAt' | 'position' | 'invoices'>;
+
+const emptyDraft = (): Draft => ({
+  title: '',
+  description: null,
+  status: 'open',
+  customerId: null,
+  printerId: null,
+  dueDate: null,
+  priority: 'normal',
+  price: null,
+  printHours: null,
+  notes: null,
+  members: [],
+  filaments: [],
+  costs: [],
+});
+
+const numOrNull = (v: string) => (v === '' ? null : Number(v.replace(',', '.')));
+
+export function ProjectDetail({
+  project,
+  onClose,
+}: {
+  project?: ProjectWithDetails;
+  onClose: () => void;
+}) {
+  const [tab, setTab] = useState<Tab>('Allgemein');
+  const [draft, setDraft] = useState<Draft>(() =>
+    project ? structuredClone(project) : emptyDraft(),
+  );
+  const { save, remove } = useSave('projects');
+  const { data: spools = [] } = useList('spools');
+
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
+    setDraft((d) => ({ ...d, [key]: value }));
+  const { data: printers = [] } = useList('printers');
+  const costs = calcProjectCosts(draft, spools, printers);
+
+  const submit = (e?: FormEvent) => {
+    e?.preventDefault();
+    if (!draft.title.trim()) {
+      setTab('Allgemein');
+      return;
+    }
+    save.mutate({ ...draft, id: project?.id } as never, { onSuccess: onClose });
+  };
+
+  const onDelete = () => {
+    if (project && confirm(`Projekt „${project.title}“ wirklich löschen?`)) {
+      remove.mutate(project.id, { onSuccess: onClose });
+    }
+  };
+
+  return (
+    <Modal
+      wide
+      title={project ? project.title : 'Neues Projekt'}
+      onClose={onClose}
+      footer={
+        <>
+          {project && (
+            <Button variant="danger" className="mr-auto" onClick={onDelete}>
+              <Trash2 size={16} /> Löschen
+            </Button>
+          )}
+          <Button onClick={onClose}>Abbrechen</Button>
+          <Button
+            variant="primary"
+            onClick={() => submit()}
+            disabled={save.isPending || !draft.title.trim()}
+          >
+            Speichern
+          </Button>
+        </>
+      }
+    >
+      <div className="-mx-1 mb-4 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line px-1 [scrollbar-width:none]">
+        {TABS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={cx(
+              '-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium',
+              tab === t
+                ? 'border-accent text-accent'
+                : 'border-transparent text-muted hover:text-main',
+            )}
+          >
+            {t}
+            {t === 'Team' && draft.members.length > 0 && ` (${draft.members.length})`}
+            {t === 'Material' && draft.filaments.length > 0 && ` (${draft.filaments.length})`}
+            {t === 'Zusatzkosten' && draft.costs.length > 0 && ` (${draft.costs.length})`}
+            {t === 'Rechnungen' &&
+              project &&
+              project.invoices.length > 0 &&
+              ` (${project.invoices.length})`}
+          </button>
+        ))}
+      </div>
+
+      <form onSubmit={submit}>
+        {tab === 'Allgemein' && <GeneralTab draft={draft} set={set} />}
+        {tab === 'Team' && <TeamTab members={draft.members} onChange={(m) => set('members', m)} />}
+        {tab === 'Material' && (
+          <MaterialTab filaments={draft.filaments} onChange={(f) => set('filaments', f)} />
+        )}
+        {tab === 'Zusatzkosten' && (
+          <CostsTab costs={draft.costs} onChange={(c) => set('costs', c)} />
+        )}
+        {tab === 'Rechnungen' &&
+          (project ? (
+            <InvoicesTab project={project} />
+          ) : (
+            <Empty>Rechnungen kannst du nach dem ersten Speichern hinzufügen.</Empty>
+          ))}
+        <button type="submit" hidden />
+      </form>
+
+      <Card className="mt-5 grid grid-cols-2 gap-3 bg-surface-2 p-4 text-sm sm:grid-cols-5">
+        <Stat label="Material" value={euro(costs.filament)} />
+        <Stat label="Maschine" value={euro(costs.machine)} />
+        <Stat label="Zusatzkosten" value={euro(costs.extras)} />
+        <Stat label="Kosten gesamt" value={euro(costs.total)} strong />
+        <Stat
+          label="Gewinn"
+          value={draft.price === null ? '–' : euro(draft.price - costs.total)}
+          className={
+            draft.price !== null && draft.price - costs.total < 0 ? 'text-red-600' : undefined
+          }
+        />
+      </Card>
+      <ErrorText error={save.error ?? remove.error} />
+    </Modal>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  strong,
+  className,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  className?: string;
+}) {
+  return (
+    <div>
+      <div className="text-xs text-muted">{label}</div>
+      <div className={cx('tabular-nums', strong ? 'font-semibold' : 'font-medium', className)}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function GeneralTab({
+  draft,
+  set,
+}: {
+  draft: Draft;
+  set: <K extends keyof Draft>(k: K, v: Draft[K]) => void;
+}) {
+  const { data: customers = [] } = useList('customers');
+  const { data: printers = [] } = useList('printers');
+  const printer = printers.find((p) => p.id === draft.printerId);
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Field label="Titel *" className="sm:col-span-2">
+        <TextInput
+          autoFocus
+          required
+          value={draft.title}
+          onChange={(e) => set('title', e.target.value)}
+          placeholder="z.B. Lampenschirm für Wohnzimmer"
+        />
+      </Field>
+      <Field label="Beschreibung" className="sm:col-span-2">
+        <TextArea
+          value={draft.description ?? ''}
+          onChange={(e) => set('description', e.target.value || null)}
+        />
+      </Field>
+      <Field label="Status">
+        <Select
+          value={draft.status}
+          onChange={(e) => set('status', e.target.value as Draft['status'])}
+        >
+          {PROJECT_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {PROJECT_STATUS_LABELS[s]}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Priorität">
+        <Select
+          value={draft.priority}
+          onChange={(e) => set('priority', e.target.value as Draft['priority'])}
+        >
+          {PRIORITIES.map((p) => (
+            <option key={p} value={p}>
+              {PRIORITY_LABELS[p]}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Kunde">
+        <Select
+          value={draft.customerId ?? ''}
+          onChange={(e) => set('customerId', numOrNull(e.target.value))}
+        >
+          <option value="">– kein Kunde (eigenes Projekt) –</option>
+          {customers.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+              {c.company ? ` (${c.company})` : ''}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Drucker">
+        <Select
+          value={draft.printerId ?? ''}
+          onChange={(e) => set('printerId', numOrNull(e.target.value))}
+        >
+          <option value="">– noch offen –</option>
+          {printers.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name} ({p.model})
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Fällig am">
+        <TextInput
+          type="date"
+          value={draft.dueDate ?? ''}
+          onChange={(e) => set('dueDate', e.target.value || null)}
+        />
+      </Field>
+      <Field
+        label={
+          printer
+            ? `Druckzeit (h) · ${euro(calcPrinterHourly(printer).total)}/h auf ${printer.name}`
+            : 'Druckzeit (Stunden)'
+        }
+      >
+        <TextInput
+          type="number"
+          step="0.25"
+          min="0"
+          inputMode="decimal"
+          placeholder="z.B. 4,5"
+          value={draft.printHours ?? ''}
+          onChange={(e) => set('printHours', numOrNull(e.target.value))}
+        />
+      </Field>
+      <Field label="Verkaufspreis (€)">
+        <TextInput
+          type="number"
+          step="0.01"
+          min="0"
+          inputMode="decimal"
+          value={draft.price ?? ''}
+          onChange={(e) => set('price', numOrNull(e.target.value))}
+        />
+      </Field>
+      <Field label="Notizen" className="sm:col-span-2">
+        <TextArea
+          value={draft.notes ?? ''}
+          onChange={(e) => set('notes', e.target.value || null)}
+        />
+      </Field>
+    </div>
+  );
+}
+
+function TeamTab({
+  members,
+  onChange,
+}: {
+  members: ProjectMember[];
+  onChange: (m: ProjectMember[]) => void;
+}) {
+  const { data: persons = [] } = useList('persons');
+  const available = persons.filter((p) => !members.some((m) => m.personId === p.id));
+
+  if (persons.length === 0) {
+    return <Empty>Lege zuerst unter „Team“ Personen an, um sie hier zuzuordnen.</Empty>;
+  }
+  return (
+    <div className="space-y-3">
+      {members.length === 0 && <p className="text-sm text-muted">Noch niemand zugeordnet.</p>}
+      {members.map((m, i) => {
+        const person = persons.find((p) => p.id === m.personId);
+        return (
+          <div key={m.personId} className="flex items-center gap-3">
+            <Avatar name={person?.name ?? '?'} size={32} />
+            <span className="flex-1 text-sm font-medium">{person?.name}</span>
+            <Select
+              className="!w-auto"
+              value={m.role}
+              onChange={(e) =>
+                onChange(
+                  members.map((x, j) =>
+                    j === i ? { ...x, role: e.target.value as ProjectMember['role'] } : x,
+                  ),
+                )
+              }
+            >
+              {MEMBER_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {MEMBER_ROLE_LABELS[r]}
+                </option>
+              ))}
+            </Select>
+            <Button
+              variant="ghost"
+              aria-label="Entfernen"
+              onClick={() => onChange(members.filter((_, j) => j !== i))}
+            >
+              <Trash2 size={16} />
+            </Button>
+          </div>
+        );
+      })}
+      {available.length > 0 && (
+        <Select
+          value=""
+          onChange={(e) =>
+            e.target.value &&
+            onChange([...members, { personId: Number(e.target.value), role: 'team' }])
+          }
+        >
+          <option value="">+ Person hinzufügen…</option>
+          {available.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </Select>
+      )}
+    </div>
+  );
+}
+
+function MaterialTab({
+  filaments,
+  onChange,
+}: {
+  filaments: Omit<ProjectFilament, 'id'>[];
+  onChange: (f: ProjectFilament[]) => void;
+}) {
+  const { data: spools = [] } = useList('spools');
+  const { data: types = [] } = useList('filament-types');
+  const { data: finishes = [] } = useList('finishes');
+  const label = (id: number) => {
+    const s = spools.find((x) => x.id === id);
+    if (!s) return 'Unbekannte Spule';
+    const type = types.find((t) => t.id === s.typeId)?.name ?? '';
+    const finish = finishes.find((f) => f.id === s.finishId)?.name;
+    return `${type} · ${s.manufacturer} ${s.colorName}${finish && finish !== 'Normal' ? ` (${finish})` : ''}`;
+  };
+  const update = (i: number, patch: Partial<ProjectFilament>) =>
+    onChange(filaments.map((f, j) => (j === i ? { ...f, ...patch } : f)) as ProjectFilament[]);
+
+  if (spools.length === 0) return <Empty>Lege zuerst unter „Filament“ deine Spulen an.</Empty>;
+
+  return (
+    <div className="space-y-3">
+      {filaments.length === 0 && (
+        <p className="text-sm text-muted">Noch kein Material zugeordnet.</p>
+      )}
+      {filaments.map((f, i) => {
+        const spool = spools.find((s) => s.id === f.spoolId);
+        return (
+          <Card
+            key={i}
+            className="grid grid-cols-2 items-end gap-3 p-3 sm:grid-cols-[1fr_110px_110px_auto]"
+          >
+            <div className="col-span-2 flex min-w-0 items-center gap-2 text-sm sm:col-span-1">
+              <ColorDot color={spool?.colorHex ?? '#ccc'} />
+              <span className="truncate font-medium">{label(f.spoolId)}</span>
+              {spool && (
+                <span className="shrink-0 text-xs text-muted">
+                  ({grams(spool.weightRemainingG)} übrig)
+                </span>
+              )}
+            </div>
+            <Field label="Geplant (g)">
+              <TextInput
+                type="number"
+                min="0"
+                inputMode="decimal"
+                value={f.plannedGrams}
+                onChange={(e) => update(i, { plannedGrams: Number(e.target.value) || 0 })}
+              />
+            </Field>
+            <Field label="Verbraucht (g)">
+              <TextInput
+                type="number"
+                min="0"
+                inputMode="decimal"
+                value={f.usedGrams ?? ''}
+                onChange={(e) => update(i, { usedGrams: numOrNull(e.target.value) })}
+              />
+            </Field>
+            <Button
+              variant="ghost"
+              aria-label="Entfernen"
+              className="col-span-2 sm:col-span-1"
+              onClick={() => onChange(filaments.filter((_, j) => j !== i) as ProjectFilament[])}
+            >
+              <Trash2 size={16} />
+            </Button>
+          </Card>
+        );
+      })}
+      <Select
+        value=""
+        onChange={(e) =>
+          e.target.value &&
+          onChange([
+            ...filaments,
+            { spoolId: Number(e.target.value), plannedGrams: 0, usedGrams: null },
+          ] as ProjectFilament[])
+        }
+      >
+        <option value="">+ Filament hinzufügen…</option>
+        {spools.map((s) => (
+          <option key={s.id} value={s.id}>
+            {label(s.id)} – {grams(s.weightRemainingG)}
+          </option>
+        ))}
+      </Select>
+      <p className="text-xs text-muted">
+        Kosten werden anteilig aus dem Spulenpreis berechnet (verbraucht, sonst geplant). Den
+        Bestand der Spule passt du unter „Filament“ an.
+      </p>
+    </div>
+  );
+}
+
+function CostsTab({
+  costs,
+  onChange,
+}: {
+  costs: Omit<ProjectCost, 'id'>[];
+  onChange: (c: ProjectCost[]) => void;
+}) {
+  const update = (i: number, patch: Partial<ProjectCost>) =>
+    onChange(costs.map((c, j) => (j === i ? { ...c, ...patch } : c)) as ProjectCost[]);
+  return (
+    <div className="space-y-3">
+      {costs.length === 0 && (
+        <p className="text-sm text-muted">
+          Extra-Teile wie Elektronik, Holz, Metall oder LEDs hier erfassen.
+        </p>
+      )}
+      {costs.map((c, i) => (
+        <Card
+          key={i}
+          className="grid grid-cols-2 items-end gap-3 p-3 sm:grid-cols-[140px_1fr_80px_100px_auto]"
+        >
+          <Field label="Kategorie">
+            <Select
+              value={c.category}
+              onChange={(e) => update(i, { category: e.target.value as ProjectCost['category'] })}
+            >
+              {COST_CATEGORIES.map((k) => (
+                <option key={k} value={k}>
+                  {COST_CATEGORY_LABELS[k]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Beschreibung">
+            <TextInput
+              value={c.description}
+              placeholder="z.B. ESP32"
+              onChange={(e) => update(i, { description: e.target.value })}
+            />
+          </Field>
+          <Field label="Menge">
+            <TextInput
+              type="number"
+              min="0"
+              step="any"
+              inputMode="decimal"
+              value={c.quantity}
+              onChange={(e) => update(i, { quantity: Number(e.target.value) || 0 })}
+            />
+          </Field>
+          <Field label="Stückpreis €">
+            <TextInput
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              value={c.unitPrice}
+              onChange={(e) => update(i, { unitPrice: Number(e.target.value) || 0 })}
+            />
+          </Field>
+          <Button
+            variant="ghost"
+            aria-label="Entfernen"
+            onClick={() => onChange(costs.filter((_, j) => j !== i) as ProjectCost[])}
+          >
+            <Trash2 size={16} />
+          </Button>
+        </Card>
+      ))}
+      <Button
+        onClick={() =>
+          onChange([
+            ...costs,
+            { category: 'electronics', description: '', quantity: 1, unitPrice: 0 },
+          ] as ProjectCost[])
+        }
+      >
+        <Plus size={16} /> Position hinzufügen
+      </Button>
+      {costs.some((c) => !c.description) && (
+        <p className="text-xs text-muted">
+          Positionen ohne Beschreibung werden beim Speichern ignoriert.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function InvoicesTab({ project }: { project: ProjectWithDetails }) {
+  const { add, remove } = useInvoices(project.id);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [form, setForm] = useState({
+    type: 'incoming',
+    date: new Date().toISOString().slice(0, 10),
+    number: '',
+    amount: '',
+    description: '',
+  });
+
+  const submit = () => {
+    const data = new FormData();
+    Object.entries(form).forEach(([k, v]) => data.append(k, v));
+    if (file) data.append('file', file);
+    add.mutate(data, {
+      onSuccess: () => {
+        setFile(null);
+        setForm((f) => ({ ...f, number: '', amount: '', description: '' }));
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      {project.invoices.length === 0 ? (
+        <p className="text-sm text-muted">Noch keine Rechnungen.</p>
+      ) : (
+        <ul className="divide-y divide-[var(--border)] rounded-lg border border-line">
+          {project.invoices.map((inv) => (
+            <li key={inv.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+              <FileText size={18} className="shrink-0 text-muted" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium">
+                  {inv.description || inv.number || INVOICE_TYPE_LABELS[inv.type]}
+                </div>
+                <div className="text-xs text-muted">
+                  {dateDe(inv.date)} · {INVOICE_TYPE_LABELS[inv.type]}
+                  {inv.number && ` · Nr. ${inv.number}`}
+                </div>
+              </div>
+              <span className="font-medium tabular-nums">{euro(inv.amount)}</span>
+              {inv.filePath && (
+                <a
+                  href={inv.filePath}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-accent hover:underline"
+                  title={inv.fileName ?? ''}
+                >
+                  <Paperclip size={16} />
+                </a>
+              )}
+              <Button
+                variant="ghost"
+                aria-label="Rechnung löschen"
+                onClick={() => confirm('Rechnung löschen?') && remove.mutate(inv.id)}
+              >
+                <Trash2 size={16} />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <Card className="space-y-3 p-4">
+        <h3 className="text-sm font-semibold">Rechnung hinzufügen</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Art">
+            <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+              {INVOICE_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {INVOICE_TYPE_LABELS[t]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Datum">
+            <TextInput
+              type="date"
+              value={form.date}
+              onChange={(e) => setForm({ ...form, date: e.target.value })}
+            />
+          </Field>
+          <Field label="Betrag (€)">
+            <TextInput
+              inputMode="decimal"
+              placeholder="0,00"
+              value={form.amount}
+              onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            />
+          </Field>
+          <Field label="Rechnungsnummer">
+            <TextInput
+              value={form.number}
+              onChange={(e) => setForm({ ...form, number: e.target.value })}
+            />
+          </Field>
+          <Field label="Beschreibung" className="sm:col-span-2">
+            <TextInput
+              value={form.description}
+              placeholder="z.B. LEDs von Amazon"
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+            />
+          </Field>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/pdf,image/*"
+            hidden
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+          <Button onClick={() => fileRef.current?.click()}>
+            <Paperclip size={16} /> PDF / Bild
+          </Button>
+          <Button onClick={() => cameraRef.current?.click()}>
+            <Camera size={16} /> Foto aufnehmen
+          </Button>
+          {file && <span className="truncate text-sm text-muted">{file.name}</span>}
+          <Button variant="primary" className="ml-auto" onClick={submit} disabled={add.isPending}>
+            Hinzufügen
+          </Button>
+        </div>
+        <p className="text-xs text-muted">
+          Automatisches Auslesen (OCR) von Scans folgt in einer späteren Version.
+        </p>
+        <ErrorText error={add.error ?? remove.error} />
+      </Card>
+    </div>
+  );
+}
