@@ -70,8 +70,8 @@ Handy ─HTTPS─▶ Cloudflare ─Tunnel─▶ Authentik-Outpost ─HTTP─▶ 
 1. **Image:** Bei jedem Push auf `main` baut GitHub Actions (`.github/workflows/docker.yml`) nach den Tests
    das Image `ghcr.io/<github-name>/druckwerk:latest` (privat).
 2. **Portainer:** Unter _Registries_ `ghcr.io` mit GitHub-Name und einem Token (classic, Recht
-   `read:packages`) anlegen. Dann _Stacks → Add stack_, Inhalt von `docker-compose.yml` einfügen,
-   `GITHUB_USER` ersetzen, deployen. Updates: im Stack _Pull and redeploy_.
+   `read:packages`) anlegen. Dann _Stacks → Add stack_, Inhalt von `docker-compose.yml` einfügen
+   und deployen. Updates: im Stack _Pull and redeploy_.
 3. **Authentik:** Provider _Proxy_ (Modus „Proxy“) mit External host `https://druckwerk.<domain>` und
    Internal host `http://<Server-IP>:3100`, dazu eine Application und beides dem Outpost zuweisen.
 4. **Cloudflare:** Im Tunnel einen Public Hostname `druckwerk.<domain>` auf den Outpost legen – wie bei

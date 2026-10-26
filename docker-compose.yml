@@ -1,9 +1,9 @@
-# Stack für Portainer (Stacks → Add stack → Web editor): Inhalt einfügen, GITHUB_USER ersetzen.
+# Stack für Portainer (Stacks → Add stack → Web editor): Inhalt einfügen.
 # Das Image ist privat: vorher in Portainer unter Registries „ghcr.io“ mit einem GitHub-Token
 # (Recht: read:packages) hinterlegen.
 services:
   druckwerk:
-    image: ghcr.io/GITHUB_USER/druckwerk:latest
+    image: ghcr.io/damada42/druckwerk:latest
     container_name: druckwerk
     restart: unless-stopped
     environment:
