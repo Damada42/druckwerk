@@ -29,6 +29,8 @@ export interface AppOptions {
   haPollMs?: number;
   /** Ersatz für fetch, damit Tests ein falsches Home Assistant einhängen können */
   haFetch?: typeof fetch;
+  /** Hinter einem Reverse-Proxy (Cloudflare/Authentik): X-Forwarded-*-Header übernehmen */
+  trustProxy?: boolean;
 }
 
 export async function buildApp(options: AppOptions) {
@@ -37,7 +39,9 @@ export async function buildApp(options: AppOptions) {
   const logger = options.logger ?? false;
   // Fastify typisiert HTTPS-Instanzen anders; die Routen sind davon unabhängig
   const app = (
-    options.https ? Fastify({ logger, https: options.https }) : Fastify({ logger })
+    options.https
+      ? Fastify({ logger, https: options.https, trustProxy: options.trustProxy })
+      : Fastify({ logger, trustProxy: options.trustProxy })
   ) as FastifyInstance;
 
   // Muss vor den Routen-Plugins stehen, sonst erben diese den Standard-Handler
@@ -68,6 +72,11 @@ export async function buildApp(options: AppOptions) {
 
   await app.register(
     async (api) => {
+      // Für den Docker-Healthcheck: prüft auch, dass die Datenbank antwortet
+      api.get('/health', () => {
+        db.select().from(schema.settings).limit(1).all();
+        return { ok: true };
+      });
       registerCrud(api, db, '/customers', schema.customers, { required: ['name'] });
       registerCrud(api, db, '/persons', schema.persons, { required: ['name'] });
       registerCrud(api, db, '/filament-types', schema.filamentTypes, { required: ['name'] });

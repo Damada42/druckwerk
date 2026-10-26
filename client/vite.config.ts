@@ -41,7 +41,9 @@ export default defineConfig(async ({ command }) => {
           ],
         },
         workbox: {
-          navigateFallbackDenylist: [/^\/api/, /^\/uploads/],
+          // Seitenaufrufe immer übers Netz: Hinter dem Login-Proxy (Authentik) muss der Proxy
+          // eine abgelaufene Sitzung zur Anmeldung umleiten können. Aus dem Cache kämen nur Assets.
+          navigateFallback: null,
         },
       }),
     ],

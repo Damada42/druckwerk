@@ -8,7 +8,8 @@
     "start": "cross-env NODE_ENV=production tsx src/index.ts",
     "db:generate": "drizzle-kit generate",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "export": "tsx src/export.ts"
   },
   "dependencies": {
     "@3dapp/shared": "*",

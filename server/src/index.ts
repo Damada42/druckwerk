@@ -24,6 +24,7 @@ const { app } = await buildApp({
   clientLogFile: `${dataDir}/client-log.jsonl`,
   // Während eines Drucks merkt sich der Server alle 20 s den aktiven AMS-Slot
   haPollMs: Number(process.env.HA_POLL_MS ?? 20_000),
+  trustProxy: process.env.TRUST_PROXY === 'true',
   https: tls && { key: tls.key, cert: tls.cert },
 });
 

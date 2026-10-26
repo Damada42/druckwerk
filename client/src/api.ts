@@ -25,14 +25,38 @@ import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/
 
 export class ApiError extends Error {}
 
+const RELOAD_KEY = 'druckwerk.authReload';
+
+/**
+ * Läuft die App hinter einem Login-Proxy (Authentik), antwortet dieser nach Ablauf der Sitzung
+ * mit einer Weiterleitung zur Anmeldung. Dann die Seite neu laden – der Seitenaufruf führt zum
+ * Login. Höchstens einmal pro Minute, damit ein falsch eingerichteter Proxy keine Schleife baut.
+ */
+function loginExpired(): never {
+  let last = 0;
+  try {
+    last = Number(sessionStorage.getItem(RELOAD_KEY) ?? 0);
+    if (Date.now() - last > 60_000) {
+      sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+      location.reload();
+    }
+  } catch {
+    // sessionStorage nicht verfügbar: lieber nicht automatisch neu laden
+  }
+  throw new ApiError('Anmeldung abgelaufen – bitte die Seite neu laden.');
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${url}`, {
     ...init,
+    // Weiterleitungen nicht folgen: Die API leitet nie weiter, nur ein Login-Proxy tut das
+    redirect: 'manual',
     headers:
       init?.body && !(init.body instanceof FormData)
         ? { 'content-type': 'application/json', ...init.headers }
         : init?.headers,
   });
+  if (res.type === 'opaqueredirect' || res.status === 401) loginExpired();
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new ApiError(body.error ?? `Fehler ${res.status}`);

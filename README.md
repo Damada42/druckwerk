@@ -47,15 +47,44 @@ wird es automatisch neu erstellt.
   Startbildschirm geht trotzdem.
 - HTTPS abschalten: `HTTPS=false` setzen.
 
-| Variable     | Standard      | Bedeutung                              |
-| ------------ | ------------- | -------------------------------------- |
-| `API_PORT`   | `3000`        | Port des Servers                       |
-| `HOST`       | `0.0.0.0`     | Netzwerk-Interface                     |
-| `DATA_DIR`   | `server/data` | Ablage für Datenbank und Rechnungen    |
-| `HTTPS`      | `true`        | `false` = nur HTTP (keine Live-Kamera) |
-| `HA_POLL_MS` | `20000`       | Abfrage-Intervall Home Assistant (ms)  |
+| Variable      | Standard      | Bedeutung                              |
+| ------------- | ------------- | -------------------------------------- |
+| `API_PORT`    | `3000`        | Port des Servers                       |
+| `HOST`        | `0.0.0.0`     | Netzwerk-Interface                     |
+| `DATA_DIR`    | `server/data` | Ablage für Datenbank und Rechnungen    |
+| `HTTPS`       | `true`        | `false` = nur HTTP (keine Live-Kamera) |
+| `HA_POLL_MS`  | `20000`       | Abfrage-Intervall Home Assistant (ms)  |
+| `TRUST_PROXY` | `false`       | `true` hinter einem Reverse-Proxy      |
 
 **Backup:** Den Ordner `server/data` sichern (enthält `3dapp.db` und alle hochgeladenen Rechnungen).
+
+## Betrieb auf dem Homeserver (Docker, von unterwegs über Authentik)
+
+Druckwerk läuft als Container, Cloudflare-Tunnel und Authentik-Outpost davor sorgen für HTTPS und Login
+(mit MFA). Druckwerk selbst hat keine Anmeldung – **nie ohne Login-Proxy ins Internet stellen**.
+
+```
+Handy ─HTTPS─▶ Cloudflare ─Tunnel─▶ Authentik-Outpost ─HTTP─▶ Druckwerk-Container (:3000)
+```
+
+1. **Image:** Bei jedem Push auf `main` baut GitHub Actions (`.github/workflows/docker.yml`) nach den Tests
+   das Image `ghcr.io/<github-name>/druckwerk:latest` (privat).
+2. **Portainer:** Unter _Registries_ `ghcr.io` mit GitHub-Name und einem Token (classic, Recht
+   `read:packages`) anlegen. Dann _Stacks → Add stack_, Inhalt von `docker-compose.yml` einfügen,
+   `GITHUB_USER` ersetzen, deployen. Updates: im Stack _Pull and redeploy_.
+3. **Authentik:** Provider _Proxy_ (Modus „Proxy“) mit External host `https://druckwerk.<domain>` und
+   Internal host `http://<Server-IP>:3100`, dazu eine Application und beides dem Outpost zuweisen.
+4. **Cloudflare:** Im Tunnel einen Public Hostname `druckwerk.<domain>` auf den Outpost legen – wie bei
+   deinen anderen Diensten.
+5. **Daten umziehen:** Am PC `npm run export -w server` (geht bei laufendem Server). Den Inhalt des
+   erzeugten Ordners `server/data/export/druckwerk-…` ins Volume kopieren und den Container neu starten,
+   z.B. `docker cp druckwerk-…/. druckwerk:/data/` und dann `docker restart druckwerk`.
+6. **Home Assistant:** In den Einstellungen die Adresse auf die lokale (`http://<HA-IP>:8123`) ändern –
+   schneller und unabhängig vom Internet. Der Token bleibt.
+7. **Handy:** `https://druckwerk.<domain>` öffnen, anmelden, im Menü „Zum Startbildschirm“ – mit dem echten
+   Zertifikat installiert sich Druckwerk jetzt als richtige App.
+
+Läuft die Anmeldung ab, lädt die App von selbst neu und landet beim Authentik-Login.
 
 ## Aufbau
 

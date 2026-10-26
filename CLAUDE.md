@@ -20,6 +20,18 @@ Requires Node 22+. On this Windows machine, PowerShell calls may need the PATH r
 
 Env vars: `API_PORT` (default 3000; deliberately not `PORT`, which the preview tooling sets), `HOST`, `DATA_DIR` (default `server/data`: DB, uploads, certs, `client-log.jsonl`), `HTTPS=false` to disable TLS, `HA_POLL_MS` (default 20000; the e2e server uses 500).
 
+## Deployment
+
+- In production the app runs as a Docker container on the user's home server (Portainer). The image is built by `.github/workflows/docker.yml` (tests first, then `ghcr.io/<owner>/druckwerk`).
+- It sits behind Cloudflare Tunnel → Authentik proxy outpost (login with MFA). The container serves plain HTTP (`HTTPS=false`, `TRUST_PROXY=true`, data in `/data`).
+- The app has no auth of its own, so it must never be exposed without the proxy.
+- Proxy constraints:
+  - `request()` in `api.ts` fetches with `redirect: 'manual'`. An opaque redirect means the Authentik session expired, and the page reloads at most once a minute (`e2e/proxy.spec.ts`).
+  - The service worker must not serve navigations from cache (`navigateFallback: null`), otherwise Authentik can't redirect to the login.
+- `GET /api/health` is the Docker healthcheck.
+- `npm run export -w server` writes a consistent DB copy plus uploads to `server/data/export/` for moving data into the container.
+- Without Docker on the PC, verify the Dockerfile's runtime stage by replaying it in a temp folder: copy only what it copies, then `npm ci --omit=dev -w server -w shared` and `node --import tsx src/index.ts`.
+
 ## Architecture
 
 The repo is an npm-workspaces monorepo: `shared/`, `server/`, `client/`.

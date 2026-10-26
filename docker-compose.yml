@@ -1,0 +1,28 @@
+# Stack für Portainer (Stacks → Add stack → Web editor): Inhalt einfügen, GITHUB_USER ersetzen.
+# Das Image ist privat: vorher in Portainer unter Registries „ghcr.io“ mit einem GitHub-Token
+# (Recht: read:packages) hinterlegen.
+services:
+  druckwerk:
+    image: ghcr.io/GITHUB_USER/druckwerk:latest
+    container_name: druckwerk
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Vienna
+    volumes:
+      # Datenbank, Rechnungen und Client-Log
+      - druckwerk-data:/data
+    # Der Authentik-Outpost erreicht Druckwerk unter http://<Server-IP>:3100.
+    # Im Heimnetz ist Druckwerk damit auch ohne Login erreichbar – wer das nicht will, lässt den
+    # Port weg und hängt den Container stattdessen ins Netzwerk des Outposts (siehe unten).
+    ports:
+      - '3100:3000'
+    # networks:
+    #   - authentik
+
+volumes:
+  druckwerk-data:
+
+# networks:
+#   authentik:
+#     external: true
+#     name: NAME_DES_OUTPOST_NETZWERKS
