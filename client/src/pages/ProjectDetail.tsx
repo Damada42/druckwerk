@@ -11,6 +11,8 @@ import {
   PROJECT_STATUS_LABELS,
   calcPrinterHourly,
   calcProjectCosts,
+  describeInvoice,
+  parseInvoice,
   type ProjectCost,
   type ProjectFilament,
   type ProjectMember,
@@ -19,6 +21,7 @@ import {
 import { Camera, FileText, Paperclip, Plus, Trash2 } from 'lucide-react';
 import { useRef, useState, type FormEvent } from 'react';
 import { useInvoices, useList, useSave } from '../api';
+import { clientLog, errorInfo } from '../clientLog';
 import {
   Avatar,
   Button,
@@ -575,18 +578,89 @@ function CostsTab({
   );
 }
 
+type InvoiceForm = {
+  type: string;
+  date: string;
+  number: string;
+  amount: string;
+  description: string;
+};
+type ReadState = { status: string; pct?: number } | { done: string[]; text: string } | null;
+
+const today = () => new Date().toISOString().slice(0, 10);
+
 function InvoicesTab({ project }: { project: ProjectWithDetails }) {
   const { add, remove } = useInvoices(project.id);
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<InvoiceForm>({
     type: 'incoming',
-    date: new Date().toISOString().slice(0, 10),
+    date: today(),
     number: '',
     amount: '',
     description: '',
   });
+  /** Von Hand bearbeitete Felder – die überschreibt die Erkennung nicht */
+  const touched = useRef(new Set<keyof InvoiceForm>());
+  const [read, setRead] = useState<ReadState>(null);
+  const [readError, setReadError] = useState<string | null>(null);
+  /** Nur das Ergebnis des zuletzt gewählten Dokuments übernehmen */
+  const readId = useRef(0);
+  const reading = !!read && 'status' in read;
+  const recognized = read && 'done' in read ? read.done : [];
+
+  const edit = (key: keyof InvoiceForm, value: string) => {
+    touched.current.add(key);
+    setForm((f) => ({ ...f, [key]: value }));
+  };
+
+  /** Rechnung lesen und leere (nicht von Hand ausgefüllte) Felder vorschlagen */
+  const pickFile = async (picked: File | null) => {
+    setFile(picked);
+    setReadError(null);
+    const id = ++readId.current;
+    if (!picked) return setRead(null);
+    const started = Date.now();
+    setRead({ status: 'Lese Rechnung…' });
+    try {
+      const { readInvoiceText } = await import('../scan/invoice');
+      const { text, source } = await readInvoiceText(picked, (status, pct) => {
+        if (id === readId.current) setRead({ status, pct });
+      });
+      if (id !== readId.current) return;
+      const guess = parseInvoice(text);
+      const proposal: Partial<InvoiceForm> = {
+        amount: guess.amount?.toFixed(2).replace('.', ','),
+        date: guess.date,
+        number: guess.number,
+        description: describeInvoice(guess),
+      };
+      const done = (Object.keys(proposal) as (keyof InvoiceForm)[]).filter(
+        (k) => proposal[k] && !touched.current.has(k),
+      );
+      setForm((f) => ({ ...f, ...Object.fromEntries(done.map((k) => [k, proposal[k]])) }));
+      setRead({ done, text });
+      clientLog('invoice-read', {
+        source,
+        type: picked.type,
+        size: picked.size,
+        chars: text.length,
+        recognized: done,
+        ms: Date.now() - started,
+        items: guess.items,
+        // Ganzer Text (gekürzt), damit sich Fehlerkennungen nachvollziehen lassen
+        sample: text.slice(0, 6000),
+      });
+    } catch (e) {
+      if (id !== readId.current) return;
+      clientLog('invoice-read-error', errorInfo(e));
+      setRead(null);
+      setReadError(
+        'Die Rechnung konnte nicht gelesen werden. Die Datei wird trotzdem angehängt – bitte Werte von Hand eintragen.',
+      );
+    }
+  };
 
   const submit = () => {
     const data = new FormData();
@@ -595,10 +669,20 @@ function InvoicesTab({ project }: { project: ProjectWithDetails }) {
     add.mutate(data, {
       onSuccess: () => {
         setFile(null);
-        setForm((f) => ({ ...f, number: '', amount: '', description: '' }));
+        setRead(null);
+        touched.current.clear();
+        readId.current++;
+        setForm((f) => ({ ...f, date: today(), number: '', amount: '', description: '' }));
       },
     });
   };
+
+  const badge = (key: keyof InvoiceForm) =>
+    recognized.includes(key) ? (
+      <span className="rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-semibold text-sky-700 dark:text-sky-300">
+        erkannt
+      </span>
+    ) : undefined;
 
   return (
     <div className="space-y-4">
@@ -646,7 +730,7 @@ function InvoicesTab({ project }: { project: ProjectWithDetails }) {
         <h3 className="text-sm font-semibold">Rechnung hinzufügen</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Art">
-            <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+            <Select value={form.type} onChange={(e) => edit('type', e.target.value)}>
               {INVOICE_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {INVOICE_TYPE_LABELS[t]}
@@ -654,32 +738,29 @@ function InvoicesTab({ project }: { project: ProjectWithDetails }) {
               ))}
             </Select>
           </Field>
-          <Field label="Datum">
+          <Field label="Datum" badge={badge('date')}>
             <TextInput
               type="date"
               value={form.date}
-              onChange={(e) => setForm({ ...form, date: e.target.value })}
+              onChange={(e) => edit('date', e.target.value)}
             />
           </Field>
-          <Field label="Betrag (€)">
+          <Field label="Betrag (€)" badge={badge('amount')}>
             <TextInput
               inputMode="decimal"
               placeholder="0,00"
               value={form.amount}
-              onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              onChange={(e) => edit('amount', e.target.value)}
             />
           </Field>
-          <Field label="Rechnungsnummer">
-            <TextInput
-              value={form.number}
-              onChange={(e) => setForm({ ...form, number: e.target.value })}
-            />
+          <Field label="Rechnungsnummer" badge={badge('number')}>
+            <TextInput value={form.number} onChange={(e) => edit('number', e.target.value)} />
           </Field>
-          <Field label="Beschreibung" className="sm:col-span-2">
+          <Field label="Beschreibung" className="sm:col-span-2" badge={badge('description')}>
             <TextInput
               value={form.description}
               placeholder="z.B. LEDs von Amazon"
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              onChange={(e) => edit('description', e.target.value)}
             />
           </Field>
         </div>
@@ -689,7 +770,10 @@ function InvoicesTab({ project }: { project: ProjectWithDetails }) {
             type="file"
             accept="application/pdf,image/*"
             hidden
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              void pickFile(e.target.files?.[0] ?? null);
+              e.target.value = '';
+            }}
           />
           <input
             ref={cameraRef}
@@ -697,7 +781,10 @@ function InvoicesTab({ project }: { project: ProjectWithDetails }) {
             accept="image/*"
             capture="environment"
             hidden
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              void pickFile(e.target.files?.[0] ?? null);
+              e.target.value = '';
+            }}
           />
           <Button onClick={() => fileRef.current?.click()}>
             <Paperclip size={16} /> PDF / Bild
@@ -706,13 +793,49 @@ function InvoicesTab({ project }: { project: ProjectWithDetails }) {
             <Camera size={16} /> Foto aufnehmen
           </Button>
           {file && <span className="truncate text-sm text-muted">{file.name}</span>}
-          <Button variant="primary" className="ml-auto" onClick={submit} disabled={add.isPending}>
+          <Button
+            variant="primary"
+            className="ml-auto"
+            onClick={submit}
+            disabled={add.isPending || reading}
+          >
             Hinzufügen
           </Button>
         </div>
-        <p className="text-xs text-muted">
-          Automatisches Auslesen (OCR) von Scans folgt in einer späteren Version.
-        </p>
+        {read && 'status' in read && (
+          <div className="space-y-1.5" role="status">
+            <p className="text-sm text-muted">{read.status}</p>
+            {read.pct !== undefined && (
+              <div className="h-2 overflow-hidden rounded-full bg-surface-2">
+                <div
+                  className="h-full bg-accent transition-all"
+                  style={{ width: `${read.pct}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+        {read && 'done' in read && (
+          <div className="space-y-1">
+            <p className="text-sm text-muted">
+              {read.done.length
+                ? 'Aus der Rechnung erkannt – bitte kurz prüfen.'
+                : 'Keine Angaben erkannt – bitte von Hand eintragen.'}
+            </p>
+            <details className="text-xs text-muted">
+              <summary className="cursor-pointer">Erkannter Text</summary>
+              <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-surface-2 p-2">
+                {read.text.trim() || '(kein Text)'}
+              </pre>
+            </details>
+          </div>
+        )}
+        {!read && (
+          <p className="text-xs text-muted">
+            PDF oder Foto anhängen: Betrag, Datum, Nummer und Händler werden automatisch ausgelesen.
+          </p>
+        )}
+        <ErrorText error={readError} />
         <ErrorText error={add.error ?? remove.error} />
       </Card>
     </div>

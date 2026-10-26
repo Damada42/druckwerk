@@ -1,10 +1,10 @@
 import { createWorker } from 'tesseract.js';
 
 /**
- * Liest den Text eines vorbereiteten Etikett-Bildes (Deutsch + Englisch).
+ * Liest den Text eines vorbereiteten Bildes (Etikett, Rechnung) auf Deutsch + Englisch.
  * Die Sprachdaten lädt Tesseract beim ersten Mal aus dem Internet; danach liegen sie im Browser-Cache.
  */
-export async function recognizeLabel(
+export async function recognizeText(
   image: HTMLCanvasElement,
   onProgress: (pct: number) => void,
 ): Promise<string> {

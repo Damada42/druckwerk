@@ -93,7 +93,13 @@ Maschinenkosten ein.
   Hersteller-Webseite führen, liefern den Hersteller, merken sich aber keine Sorte (wären bei allen
   Farben gleich).
 
+**Phase 3 (fertig):** Rechnungen auslesen unter „Projekt → Rechnungen“: Beim Anhängen eines PDFs
+oder Fotos schlägt die App **Endbetrag, Rechnungsdatum, Rechnungsnummer und als Beschreibung die
+gekauften Artikel samt Händler** vor, z.B. „SUNLU PLA Filament 1.75mm (Amazon)“ (Feld-Hinweis „erkannt“).
+Ab drei Artikeln steht dort „… + 2 weitere“; ohne erkennbare Artikeltabelle nur der Händler. PDFs mit Textebene werden direkt gelesen (pdf.js), Fotos und eingescannte PDFs per
+Texterkennung. Von Hand eingetragene Werte bleiben unangetastet; der erkannte Text ist zum Prüfen
+aufklappbar.
+
 Noch offen:
 
-- **Phase 3:** Rechnungen per OCR auslesen (Betrag, Datum vorschlagen)
 - **Phase 4:** Home-Assistant-Anbindung für Live-Status des Bambu Lab P1S (Fortschritt, Temperaturen, AMS-Slots)

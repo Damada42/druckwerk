@@ -8,7 +8,7 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   closestCorners,
   useDroppable,
@@ -78,6 +78,8 @@ export function ProjectsPage() {
   const [activeId, setActiveId] = useState<number | null>(null);
   // Nach dem Loslassen feuert der Browser noch einen Klick – der soll kein Detail öffnen
   const lastDragEnd = useRef(0);
+  /** Zählt Zieh-Vorgänge, damit ein später bestätigter alter Zug kein neues Ziehen stört */
+  const dragRun = useRef(0);
   const open = (pid: number) => {
     if (Date.now() - lastDragEnd.current > 250) navigate(`/projekte/${pid}`);
   };
@@ -92,9 +94,12 @@ export function ProjectsPage() {
   const columns = dragCols ?? buildColumns(visible);
   const byId = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
 
+  // Maus und Finger getrennt: Ein PointerSensor würde am Handy schon beim Wischen starten und
+  // sofort abbrechen, weil der Browser die Geste als Scrollen übernimmt. Per Finger daher erst
+  // nach kurzem Gedrückthalten ziehen – normales Wischen scrollt weiter durch die Spalten.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
@@ -104,6 +109,7 @@ export function ProjectsPage() {
   };
 
   const onDragStart = ({ active }: DragStartEvent) => {
+    dragRun.current++;
     setActiveId(Number(active.id));
     setDragCols(buildColumns(visible));
   };
@@ -131,10 +137,9 @@ export function ProjectsPage() {
     const cols = dragCols;
     lastDragEnd.current = Date.now();
     setActiveId(null);
-    setDragCols(null);
-    if (!over || !cols) return;
+    if (!over || !cols) return setDragCols(null);
     const status = findColumn(cols, active.id);
-    if (!status) return;
+    if (!status) return setDragCols(null);
     let ids = cols[status];
     const oldIndex = ids.indexOf(Number(active.id));
     const overIndex = ids.indexOf(Number(over.id));
@@ -142,10 +147,18 @@ export function ProjectsPage() {
     const index = ids.indexOf(Number(active.id));
     const project = byId.get(Number(active.id))!;
     const position = positionBetween(ids, index, (pid) => byId.get(pid)!.position);
-    if (project.status === status && project.position === position) return;
+    if (project.status === status && project.position === position) return setDragCols(null);
     // Unveränderte Reihenfolge in derselben Spalte nicht speichern
-    if (project.status === status && buildColumns(visible)[status].join() === ids.join()) return;
-    move.mutate({ id: project.id, status, position });
+    if (project.status === status && buildColumns(visible)[status].join() === ids.join())
+      return setDragCols(null);
+    // Neue Anordnung stehen lassen, bis der Server bestätigt hat. Sonst zeigt das Board kurz
+    // den alten Stand und die Ablege-Animation fliegt zur Ursprungsposition zurück.
+    setDragCols({ ...cols, [status]: ids });
+    const run = dragRun.current;
+    move.mutate(
+      { id: project.id, status, position },
+      { onSettled: () => run === dragRun.current && setDragCols(null) },
+    );
   };
 
   const isNew = params.get('neu') === '1';
@@ -161,7 +174,7 @@ export function ProjectsPage() {
     <>
       <PageHeader
         title="Projekte"
-        subtitle="Karten zwischen den Spalten ziehen, um den Status zu ändern."
+        subtitle="Karten zwischen den Spalten ziehen, um den Status zu ändern – am Handy kurz gedrückt halten."
         actions={
           <>
             <div className="relative">
@@ -197,7 +210,13 @@ export function ProjectsPage() {
             setDragCols(null);
           }}
         >
-          <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0">
+          {/* Beim Ziehen kein Einrasten, sonst kämpft es mit dem automatischen Scrollen zur Zielspalte */}
+          <div
+            className={cx(
+              '-mx-4 flex gap-4 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0',
+              !activeId && 'snap-x snap-mandatory',
+            )}
+          >
             {PROJECT_STATUSES.map((status) => (
               <Column key={status} status={status} count={columns[status].length}>
                 <SortableContext items={columns[status]} strategy={verticalListSortingStrategy}>
@@ -301,7 +320,7 @@ function ProjectCard({ project, dragging }: { project: ProjectWithDetails; dragg
   return (
     <article
       className={cx(
-        'cursor-grab touch-manipulation rounded-lg border border-line bg-surface p-3 shadow-sm transition select-none hover:border-accent/50',
+        'cursor-grab touch-manipulation rounded-lg [-webkit-touch-callout:none] border border-line bg-surface p-3 shadow-sm transition select-none hover:border-accent/50',
         dragging && 'rotate-2 cursor-grabbing shadow-lg',
       )}
     >

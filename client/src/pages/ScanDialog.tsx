@@ -189,8 +189,8 @@ export function ScanDialog({
       image = await prepare(file, 'label', 1600);
       // Nacheinander statt gleichzeitig, damit der Speicher auf schwächeren Handys reicht
       const code = await decode(image, 'label');
-      const { recognizeLabel } = await import('../scan/ocr');
-      const text = await recognizeLabel(image, (pct) => {
+      const { recognizeText } = await import('../scan/ocr');
+      const text = await recognizeText(image, (pct) => {
         setStatus('Erkenne Text…');
         setProgress(pct);
       });
