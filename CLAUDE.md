@@ -40,7 +40,7 @@ Fastify 5 + better-sqlite3 + drizzle-orm.
 - `routes/crud.ts` provides a generic `registerCrud` used for the simple entities.
 - `routes/projects.ts`: on create and update, a project replaces its members, filaments and costs wholesale. `PATCH /projects/:id/move` uses fractional `position` values for Kanban ordering.
 - `routes/scan.ts`: barcode lookup and batch spool creation. Remembered products live in `filament_products`, keyed by a unique barcode.
-- `routes/clientLog.ts`: `POST /api/client-log` receives browser diagnostics, writes them to the server log and appends them to `DATA_DIR/client-log.jsonl`. When debugging phone behavior, read that file. Entries can include a `sample` JPEG data URL of what the live scanner saw.
+- `routes/clientLog.ts`: `POST /api/client-log` receives browser diagnostics, writes them to the server log and appends them to `DATA_DIR/client-log.jsonl`. When debugging phone behavior, read that file. The `sample` field holds a JPEG data URL of what the live scanner saw (`scan-live`), or the first 6000 characters of recognized text (`invoice-read`), so parser misreads can be turned into unit tests.
 - `src/cert.ts` `ensureCert` generates and caches a self-signed certificate covering localhost, the hostname and LAN IPs. The Vite dev server reuses the same certificate from `server/data/certs`.
 - In production the server also serves `client/dist` with an SPA fallback, plus `/uploads`.
 
@@ -67,9 +67,11 @@ React 19, Vite 7, Tailwind v4 (tokens in `index.css`), React Router 7 and TanSta
 - Projects: `desktop`, `handy` (Pixel 7, `mobile.spec.ts`) and `kamera` (`live.spec.ts`).
 - The `kamera` project feeds Chrome a fake camera stream. `global-setup.ts` renders an EAN with bwip-js into an MJPEG file.
 - The photo-based scan tests upload into the hidden `data-testid="barcode-photo"` and `"label-photo"` inputs.
+- Playwright has no touch-drag API. `mobile.spec.ts` drives real touch gestures (long press, swipe) through a CDP session with `Input.dispatchTouchEvent`, and checks the drop per animation frame with `requestAnimationFrame`.
+- `invoice.spec.ts` renders an invoice HTML page to a PDF (`page.pdf`) or a screenshot (photo/OCR path) instead of keeping binary fixtures.
 
 ## Context
 
 - Target device: the user's phone, Samsung Internet on Android 10. Chrome on the phone fails to connect.
-- The server is reached at `https://<PC-IP>:3000` on the LAN.
+- The server is reached at `https://<PC-IP>:3000` on the LAN. The phone only sees client changes after the `npm run prod` server has been restarted (it rebuilds the client), followed by a page reload on the phone.
 - Roadmap: phases 1 (core + Kanban), 2 (filament scan) and 3 (invoice reading) are done. Phase 4 is Home Assistant live status for the Bambu Lab P1S.
