@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Druckwerk is a 3D-printing manager: a PWA plus a small home-network server (Node + SQLite). It manages a project Kanban board, customers, team members, filament stock with barcode/OCR scanning, printers with cost per print hour, and invoices. The user is German; the UI text, code comments, test names and README are all German. Keep it that way.
+Druckwerk is a 3D-printing manager: a PWA plus a small home-network server (Node + SQLite). It manages a project Kanban board, customers, team members, filament stock with barcode/OCR scanning, printers with cost per print hour and Bambu Lab live status via Home Assistant, and invoices with OCR prefill. The user is German; the UI text, code comments, test names and README are all German. Keep it that way.
 
 ## Commands
 
@@ -11,10 +11,10 @@ Requires Node 22+. On this Windows machine, PowerShell calls may need the PATH r
 
 - `npm run dev`: server (tsx watch, port 3000) and Vite client (port 5173, proxies `/api` and `/uploads` to 3000), both over HTTPS.
 - `npm run prod`: builds the client, then the server serves it plus the API on port 3000. Use this for phone testing. The Vite dev server reloads the page when its HMR websocket reconnects (for example after coming back from the camera app), and on Windows it sometimes serves stale module transforms after multi-step edits.
-- `npm run typecheck`: `tsc --noEmit` for both server and client. There is no linter; formatting is done with `npm run format` (Prettier).
+- `npm run typecheck`: `tsc --noEmit` for both server and client. There is no linter; formatting is done with Prettier. `npm run format` (`prettier --write .`) also rewrites other sessions' checkouts under `.claude/worktrees/`, so run `npx prettier --write <changed files>` instead.
 - `npm test`: server unit tests (vitest). For a single file or test, run `npx vitest run --root server test/label.test.ts -t "<name>"`.
 - `npm run e2e`: builds the client first, then runs Playwright with the installed Chrome (`channel: 'chrome'`, no browser download). It starts its own server on port 3200 with a temporary `DATA_DIR`. Tests in a project share one database and run sequentially, so later specs depend on earlier ones. For a single spec, run `npx playwright test e2e/scan.spec.ts --project desktop`, but only after `npm run build`.
-- `npm run db:generate -w server`: after changing `server/src/db/schema.ts`, generate a migration in `server/drizzle/`. Migrations run automatically on server start.
+- `npm run db:generate -w server`: after changing `server/src/db/schema.ts`, generate a migration in `server/drizzle/`. Migrations run automatically on server start. drizzle-kit asks interactively when a change could be a column rename (a column added and one dropped in the same table). That prompt can't be answered here, so add the new column in one migration and drop the old one in a second (see `0003`/`0004`).
 
 Env vars: `API_PORT` (default 3000; deliberately not `PORT`, which the preview tooling sets), `HOST`, `DATA_DIR` (default `server/data`: DB, uploads, certs, `client-log.jsonl`), `HTTPS=false` to disable TLS, `HA_POLL_MS` (default 20000; the e2e server uses 500).
 
@@ -79,6 +79,7 @@ React 19, Vite 7, Tailwind v4 (tokens in `index.css`), React Router 7 and TanSta
 - The `kamera` project feeds Chrome a fake camera stream. `global-setup.ts` renders an EAN with bwip-js into an MJPEG file.
 - The photo-based scan tests upload into the hidden `data-testid="barcode-photo"` and `"label-photo"` inputs.
 - Playwright has no touch-drag API. `mobile.spec.ts` drives real touch gestures (long press, swipe) through a CDP session with `Input.dispatchTouchEvent`, and checks the drop per animation frame with `requestAnimationFrame`.
+- `printer.spec.ts` walks the Home Assistant flow (connect, link, AMS import, print, pause, booking, undo) against `FakeHa`. Its tests depend on each other and on spec order. After changing the fake printer state it waits for `/api/printers/1/live` before reloading, because the server caches HA data for 2 s.
 - `invoice.spec.ts` renders an invoice HTML page to a PDF (`page.pdf`) or a screenshot (photo/OCR path) instead of keeping binary fixtures.
 
 ## Context
