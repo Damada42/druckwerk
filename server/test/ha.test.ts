@@ -1,5 +1,6 @@
 import {
   findPrinterDevices,
+  maskUrl,
   parsePrinterLive,
   type FilamentBooking,
   type FilamentSpool,
@@ -113,6 +114,15 @@ describe('Live-Status aus Home-Assistant-Daten', () => {
     expect(live.ams.find((s) => s.active)?.label).toBe('A2');
   });
 
+  it('macht Adressen für die Anzeige teilweise unkenntlich', () => {
+    expect(maskUrl('https://abcdefghijklmnopqrstuvwxyz012345.ui.nabu.casa')).toBe(
+      'https://abc•••.ui.nabu.casa',
+    );
+    expect(maskUrl('http://192.168.1.50:8123')).toBe('http://192.168.•.•:8123');
+    expect(maskUrl('http://homeassistant.local:8123')).toBe('http://hom•••.local:8123');
+    expect(maskUrl('kaputt')).toBe('•••');
+  });
+
   it('ergänzt bei der Adresse http:// und entfernt Pfade', () => {
     expect(normalizeUrl('homeassistant.local:8123/')).toBe('http://homeassistant.local:8123');
     expect(normalizeUrl(' https://ha.example.test/lovelace/0 ')).toBe('https://ha.example.test');
@@ -146,8 +156,12 @@ describe('Home-Assistant-Anbindung über die API', () => {
   };
 
   async function connect() {
-    const res = await json('PUT', '/api/ha/settings', { url: 'ha.test:8123', token: FAKE_TOKEN });
-    expect(res.status).toBe(200);
+    const res = await json('POST', '/api/ha/connections', {
+      name: 'Zuhause',
+      url: 'ha.test:8123',
+      token: FAKE_TOKEN,
+    });
+    expect(res.status).toBe(201);
   }
 
   async function linkPrinter() {
@@ -168,35 +182,114 @@ describe('Home-Assistant-Anbindung über die API', () => {
   const remaining = async (id: number) =>
     (await json<FilamentSpool>('GET', `/api/spools/${id}`)).body.weightRemainingG;
 
-  it('speichert Verbindung nur mit gültigem Token und gibt den Token nie heraus', async () => {
-    const bad = await json<{ error: string }>('PUT', '/api/ha/settings', {
+  it('speichert Verbindung nur mit gültigem Token; Adresse und Token verlassen den Server nie', async () => {
+    const bad = await json<{ error: string }>('POST', '/api/ha/connections', {
+      name: 'Zuhause',
       url: 'ha.test:8123',
       token: 'falsch',
     });
     expect(bad.status).toBe(400);
-    expect(bad.body.error).toMatch(/Token/);
-    expect((await json<HaStatus>('GET', '/api/ha/status')).body).toMatchObject({
-      ok: false,
-      hasToken: false,
-    });
+    expect(bad.body.error).toBe(
+      'Home Assistant „Zuhause“ lehnt den Token ab – bitte einen neuen erstellen.',
+    );
+    expect((await json<HaStatus>('GET', '/api/ha/status')).body).toEqual({ connections: [] });
 
     await connect();
     const status = await json<HaStatus>('GET', '/api/ha/status');
     expect(status.body).toEqual({
-      url: 'http://ha.test:8123',
-      hasToken: true,
-      ok: true,
-      version: '2026.10.4',
-      printers: [{ id: DEVICE, name: 'the_one', model: 'P1S' }],
+      connections: [
+        {
+          id: 1,
+          name: 'Zuhause',
+          url: 'http://ha•••.test:8123',
+          ok: true,
+          version: '2026.10.4',
+          printers: [{ id: DEVICE, name: 'the_one', model: 'P1S', location: 'Zuhause' }],
+        },
+      ],
     });
     expect(JSON.stringify(status.body)).not.toContain(FAKE_TOKEN);
+    expect(JSON.stringify(status.body)).not.toContain('ha.test');
 
-    // Adresse ändern ohne Token erneut einzugeben
-    const again = await json('PUT', '/api/ha/settings', { url: 'http://ha.test:8123/' });
-    expect(again.status).toBe(200);
+    // Nur umbenennen: Adresse und Token bleiben
+    expect((await json('PUT', '/api/ha/connections/1', { name: 'Werkstatt' })).status).toBe(204);
+    // Neuer Token muss wieder geprüft werden
+    expect((await json('PUT', '/api/ha/connections/1', { token: 'falsch' })).status).toBe(400);
+    const renamed = (await json<HaStatus>('GET', '/api/ha/status')).body.connections[0];
+    expect(renamed).toMatchObject({ name: 'Werkstatt', ok: true });
 
-    await json('DELETE', '/api/ha/settings');
-    expect((await json<HaStatus>('GET', '/api/ha/status')).body.hasToken).toBe(false);
+    expect((await json('DELETE', '/api/ha/connections/1')).status).toBe(204);
+    expect((await json('DELETE', '/api/ha/connections/1')).status).toBe(404);
+    expect((await json<HaStatus>('GET', '/api/ha/status')).body.connections).toEqual([]);
+  });
+
+  it('zwei Standorte: jeder Drucker findet seinen, ein ausgefallener stört den anderen nicht', async () => {
+    // Zweiter Standort mit eigenem P1S: gleiche Daten, andere Geräte-IDs und Entity-Namen
+    const ids: Record<string, string> = {
+      [DEVICE]: 'aaaa0000aaaa0000aaaa0000aaaa0000',
+      e0f46f132bda8171bb9eb5c438684ab0: 'bbbb0000bbbb0000bbbb0000bbbb0000',
+      b9f4374c311cd408b1ed90eb9a9334ad: 'cccc0000cccc0000cccc0000cccc0000',
+    };
+    let json2 = JSON.stringify(FIXTURE)
+      .replaceAll('the_one', 'werkstatt')
+      .replaceAll('p1s_01p09a431900844', 'p1s_werkstatt');
+    for (const [from, to] of Object.entries(ids)) json2 = json2.replaceAll(from, to);
+    const werkstatt = new FakeHa(
+      JSON.parse(json2) as RawEntity[],
+      'werkstatt',
+      'p1s_werkstatt_ams_1',
+    );
+    let werkstattDown = false;
+    const router: typeof fetch = (input, init) => {
+      if (!String(input).includes('werkstatt.test')) return ha.fetch(input, init);
+      if (werkstattDown) return Promise.reject(new TypeError('fetch failed'));
+      return werkstatt.fetch(input, init);
+    };
+    await app().close();
+    built = await buildApp({ dbFile: ':memory:', uploadDir, haFetch: router });
+
+    await connect();
+    const added = await json('POST', '/api/ha/connections', {
+      name: 'Werkstatt',
+      url: 'https://werkstatt.test',
+      token: FAKE_TOKEN,
+    });
+    expect(added.status).toBe(201);
+    const status = (await json<HaStatus>('GET', '/api/ha/status')).body;
+    expect(status.connections.map((c) => [c.name, c.url, c.printers[0]?.name])).toEqual([
+      ['Zuhause', 'http://ha•••.test:8123', 'the_one'],
+      ['Werkstatt', 'https://wer•••.test', 'werkstatt'],
+    ]);
+
+    await linkPrinter();
+    const second = await json('POST', '/api/printers', {
+      name: 'P1S Werkstatt',
+      model: 'Bambu Lab P1S',
+      haDeviceId: 'aaaa0000aaaa0000aaaa0000aaaa0000',
+    });
+    expect(second.status).toBe(201);
+    werkstatt.print('running', { slot: 1 });
+    await built.ha.entities({ fresh: true });
+    const live = async (id: number) =>
+      (await json<PrinterLiveResponse>('GET', `/api/printers/${id}/live`)).body;
+    expect(await live(1)).toMatchObject({ status: 'ok', live: { state: 'idle' } });
+    expect(await live(2)).toMatchObject({ status: 'ok', live: { state: 'running' } });
+
+    // Befehl geht an das richtige Home Assistant
+    expect((await json('POST', '/api/printers/2/control', { action: 'pause' })).status).toBe(204);
+    expect(werkstatt.calls.at(-1)?.entityId).toBe('button.werkstatt_druckvorgang_anhalten');
+    expect(ha.calls).toEqual([]);
+
+    // Werkstatt fällt aus: Zuhause läuft weiter, Werkstatt-Drucker zeigt den Grund
+    werkstattDown = true;
+    await built.ha.entities({ fresh: true });
+    expect(await live(1)).toMatchObject({ status: 'ok' });
+    expect(await live(2)).toEqual({
+      status: 'error',
+      error: 'Home Assistant „Werkstatt“ ist nicht erreichbar.',
+    });
+    const down = (await json<HaStatus>('GET', '/api/ha/status')).body.connections;
+    expect(down.map((c) => c.ok)).toEqual([true, false]);
   });
 
   it('Live-Status: erst nicht eingerichtet, dann nicht verknüpft, dann Daten', async () => {
@@ -227,7 +320,9 @@ describe('Home-Assistant-Anbindung über die API', () => {
     expect((await json('POST', '/api/printers/1/control', { action: 'formatieren' })).status).toBe(
       400,
     );
-    expect(ha.calls).toEqual([
+    expect(
+      ha.calls.map(({ domain, service, entityId }) => ({ domain, service, entityId })),
+    ).toEqual([
       { domain: 'button', service: 'press', entityId: 'button.the_one_druckvorgang_anhalten' },
       { domain: 'light', service: 'turn_on', entityId: 'light.the_one_druckraumbeleuchtung' },
     ]);
@@ -305,6 +400,74 @@ describe('Home-Assistant-Anbindung über die API', () => {
     ha.print('finish', { slot: null });
     await tick(150);
     expect((await json<FilamentBooking[]>('GET', '/api/bookings')).body).toHaveLength(1);
+  });
+
+  it('Geschwindigkeit: nur während des Drucks, schaltet das Select in HA um', async () => {
+    await connect();
+    await linkPrinter();
+    const live = async () =>
+      (
+        (await json<PrinterLiveResponse>('GET', '/api/printers/1/live')).body as {
+          live: { speed: string | null; canSetSpeed: boolean };
+        }
+      ).live;
+
+    // Leerlauf: HA meldet das Select als „unavailable“
+    expect(await live()).toMatchObject({ speed: null, canSetSpeed: false });
+    expect((await json('POST', '/api/printers/1/speed', { speed: 'sport' })).status).toBe(409);
+
+    ha.print('running', { slot: 1 });
+    await built.ha.entities({ fresh: true }); // Zwischenspeicher (2 s) nach Zustandswechsel leeren
+    expect(await live()).toMatchObject({ speed: 'standard', canSetSpeed: true });
+    expect((await json('POST', '/api/printers/1/speed', { speed: 'warp' })).status).toBe(400);
+    expect((await json('POST', '/api/printers/1/speed', { speed: 'sport' })).status).toBe(204);
+    expect(ha.calls.at(-1)).toEqual({
+      domain: 'select',
+      service: 'select_option',
+      entityId: 'select.the_one_druckgeschwindigkeit',
+      data: { entity_id: 'select.the_one_druckgeschwindigkeit', option: 'sport' },
+    });
+    expect((await live()).speed).toBe('sport');
+  });
+
+  it('Teile überspringen: mit Gerät und IDs, nie das letzte Teil', async () => {
+    await connect();
+    await linkPrinter();
+    const objects = { '95': 'Halter links', '409': 'Halter rechts', '1463': 'Deckel' };
+    // Echte Daten im Leerlauf: ein Teil, nichts überspringbar
+    const idle = (await json<PrinterLiveResponse>('GET', '/api/printers/1/live')).body;
+    expect(idle).toMatchObject({
+      live: { objects: [{ id: '95', name: 'HolyCase V5.step', skipped: false }], canSkip: false },
+    });
+
+    ha.print('running', { slot: 1, objects });
+    expect((await json('POST', '/api/printers/1/skip', { objects: ['999'] })).status).toBe(400);
+    expect((await json('POST', '/api/printers/1/skip', { objects: ['95', '409'] })).status).toBe(
+      204,
+    );
+    expect(ha.calls.at(-1)).toMatchObject({
+      domain: 'bambu_lab',
+      service: 'skip_objects',
+      data: { device_id: DEVICE, objects: '95,409' },
+    });
+
+    const res = (await json<PrinterLiveResponse>('GET', '/api/printers/1/live')).body;
+    expect(res).toMatchObject({
+      live: {
+        objects: [
+          { id: '95', skipped: true },
+          { id: '409', skipped: true },
+          { id: '1463', skipped: false },
+        ],
+        canSkip: false, // nur noch ein Teil übrig
+      },
+    });
+    const last = await json<{ error: string }>('POST', '/api/printers/1/skip', {
+      objects: ['1463'],
+    });
+    expect(last.status).toBe(409);
+
+    expect((await app().inject('/api/printers/1/plate')).statusCode).toBe(200);
   });
 
   it('übernimmt eine AMS-Spule in den Bestand und ordnet sie dem Slot zu', async () => {

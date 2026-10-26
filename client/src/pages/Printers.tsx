@@ -132,7 +132,12 @@ function CostComparison({ printers }: { printers: Printer[] }) {
 /** Auswahl des Home-Assistant-Geräts; ohne Verbindung nur ein Hinweis */
 function haField(devices: HaPrinterDevice[], current: string | null | undefined): FieldDef[] {
   if (!devices.length && !current) return [];
-  const options = devices.map((d) => ({ value: d.id, label: `${d.name} (${d.model})` }));
+  // Bei mehreren Standorten den Standort dazuschreiben
+  const several = new Set(devices.map((d) => d.location)).size > 1;
+  const options = devices.map((d) => ({
+    value: d.id,
+    label: `${d.name} (${d.model})${several && d.location ? ` – ${d.location}` : ''}`,
+  }));
   if (current && !devices.some((d) => d.id === current))
     options.push({ value: current, label: 'Bisheriges Gerät (gerade nicht gefunden)' });
   return [
@@ -153,7 +158,10 @@ export function PrintersPage() {
   const [editing, setEditing] = useState<Printer | 'new' | null>(null);
   const fields = [
     ...BASE_FIELDS,
-    ...haField(ha?.printers ?? [], editing && editing !== 'new' ? editing.haDeviceId : null),
+    ...haField(
+      (ha?.connections ?? []).flatMap((c) => c.printers),
+      editing && editing !== 'new' ? editing.haDeviceId : null,
+    ),
     ...COST_FIELDS,
   ];
 

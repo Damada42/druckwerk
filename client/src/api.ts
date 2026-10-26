@@ -1,10 +1,10 @@
 import {
   ACTIVE_PRINT_STATES,
   type FilamentBooking,
-  type HaSettings,
   type HaStatus,
   type PrinterAction,
   type PrinterLiveResponse,
+  type PrintSpeed,
 } from '@3dapp/shared';
 import type {
   BarcodeLookup,
@@ -169,22 +169,27 @@ export function useHaStatus() {
   });
 }
 
-export function useHaSettings() {
+/** Home-Assistant-Verbindungen (Standorte) anlegen, ändern, löschen */
+export function useHaConnections() {
   const qc = useQueryClient();
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['ha-status'] });
     qc.invalidateQueries({ queryKey: ['printer-live'] });
   };
+  type Body = { name?: string; url?: string; token?: string };
   const save = useMutation({
-    mutationFn: (body: { url: string; token?: string }) =>
-      api.put<HaSettings>('/ha/settings', body),
+    // Leere Adresse/Token beim Ändern = bisherigen Wert behalten
+    mutationFn: async ({ id, ...body }: Body & { id?: number }) => {
+      if (id) await api.put<void>(`/ha/connections/${id}`, body);
+      else await api.post<{ id: number }>('/ha/connections', body);
+    },
     onSuccess: invalidate,
   });
-  const disconnect = useMutation({
-    mutationFn: () => api.del('/ha/settings'),
+  const remove = useMutation({
+    mutationFn: (id: number) => api.del(`/ha/connections/${id}`),
     onSuccess: invalidate,
   });
-  return { save, disconnect };
+  return { save, remove };
 }
 
 /** Live-Status eines Druckers; fragt alle paar Sekunden nach, schneller während eines Drucks */
@@ -219,6 +224,24 @@ export function useAmsLink() {
       api.post<void>('/ams-link', body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['spools'] }),
   });
+}
+
+/** Geschwindigkeitsstufe und Teile überspringen während eines Drucks */
+export function usePrintAdjust(printerId: number) {
+  const qc = useQueryClient();
+  // HA braucht einen Moment, bis der Drucker die Änderung zurückmeldet
+  const refresh = () =>
+    setTimeout(() => qc.invalidateQueries({ queryKey: ['printer-live', printerId] }), 2500);
+  const speed = useMutation({
+    mutationFn: (value: PrintSpeed) =>
+      api.post<void>(`/printers/${printerId}/speed`, { speed: value }),
+    onSuccess: refresh,
+  });
+  const skip = useMutation({
+    mutationFn: (objects: string[]) => api.post<void>(`/printers/${printerId}/skip`, { objects }),
+    onSuccess: refresh,
+  });
+  return { speed, skip };
 }
 
 /** Spule aus einem AMS-Slot in den Bestand übernehmen (und dem Slot zuordnen) */

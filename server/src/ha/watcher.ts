@@ -63,7 +63,11 @@ export function createWatcher(db: Db, ha: HaClient, log?: FastifyBaseLogger) {
       .where(isNotNull(schema.printers.haDeviceId))
       .all();
     if (!linked.length) return;
-    const entities = await ha.entities({ fresh: true });
+    const { entities, errors } = await ha.entities({ fresh: true });
+    // Ein nicht erreichbarer Standort stört die anderen nicht; nur bei neuer Ursache loggen
+    const message = errors.map((e) => e.message).join(' ') || null;
+    if (message && message !== lastError) log?.warn(message);
+    lastError = message;
     for (const printer of linked) {
       const live = parsePrinterLive(entities, printer.haDeviceId!);
       const plan = tracker.observe(`printer-${printer.id}`, live, now);
@@ -83,14 +87,10 @@ export function createWatcher(db: Db, ha: HaClient, log?: FastifyBaseLogger) {
     tracker,
     start(intervalMs: number) {
       const run = () =>
-        tick().then(
-          () => (lastError = null),
-          (e: Error) => {
-            // Nur bei neuer Ursache loggen, sonst füllt ein ausgeschaltetes HA das Log
-            if (e.message !== lastError) log?.warn(`Home Assistant: ${e.message}`);
-            lastError = e.message;
-          },
-        );
+        tick().catch((e: Error) => {
+          if (e.message !== lastError) log?.warn(`Home Assistant: ${e.message}`);
+          lastError = e.message;
+        });
       timer = setInterval(run, intervalMs);
       timer.unref();
       void run();

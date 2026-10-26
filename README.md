@@ -103,13 +103,19 @@ aufklappbar.
 
 **Phase 4 (fertig):** Home-Assistant-Anbindung für Bambu-Lab-Drucker (Integration „Bambu Lab“ in HA):
 
-- **Einrichten:** Unter „Einstellungen → Home Assistant“ Adresse (z.B. `http://homeassistant.local:8123`)
-  und einen langlebigen Zugriffstoken eintragen (HA → Profil → Sicherheit → Langlebige Zugriffstoken).
-  Der Token bleibt auf dem Server, der Browser bekommt ihn nie zu sehen. Danach unter „Drucker →
-  Bearbeiten“ das gefundene HA-Gerät wählen.
+- **Einrichten:** Unter „Einstellungen → Home Assistant“ einen Standort-Namen, die Adresse (z.B.
+  `http://homeassistant.local:8123`) und einen langlebigen Zugriffstoken eintragen (HA → Profil →
+  Sicherheit → Langlebige Zugriffstoken). Adresse und Token bleiben auf dem Server; die Adresse wird nur
+  gekürzt angezeigt (`https://abc•••.ui.nabu.casa`). Danach unter „Drucker → Bearbeiten“ das gefundene
+  HA-Gerät wählen.
+- **Mehrere Standorte:** Beliebig viele Home-Assistant-Verbindungen, z.B. „Zuhause“ und „Werkstatt“. Die
+  Drucker aller Standorte stehen in derselben Auswahl; ist ein Standort offline, laufen die anderen weiter.
 - **Live-Status** auf der Drucker-Seite und in der Übersicht: Status, Fortschritt, Schicht, Restzeit,
   Endzeit, Temperaturen, Auftrag mit Vorschaubild.
-- **Steuerung:** Pause, Fortsetzen, Abbrechen (mit Rückfrage) und Druckraumbeleuchtung.
+- **Steuerung:** Pause, Fortsetzen, Abbrechen (mit Rückfrage) und Druckraumbeleuchtung. Während eines
+  Drucks außerdem die **Geschwindigkeit** (Leise 50 %, Standard, Sport 124 %, Ludicrous 166 %) und
+  **Teile überspringen**: Plattenbild mit markierten Teilen, Teile ankreuzen, bestätigen – mindestens ein
+  Teil muss weiterlaufen.
 - **AMS:** Die Slots zeigen Material, Farbe und Rest-% laut Drucker. Jedem Slot lässt sich eine Spule aus
   dem Bestand zuordnen; im Filament-Bestand steht sie dann als „Im AMS, Slot n“. Ist die Spule noch nicht
   im Bestand, legt „Übernehmen“ sie mit den AMS-Daten an (Hersteller, Typ, Farbe mit deutschem Farbnamen,

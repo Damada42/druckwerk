@@ -1,24 +1,37 @@
-import type {
-  AmsSlot,
-  FilamentSpool,
-  FilamentType,
-  Printer,
-  PrinterLive,
-  PrintState,
+import {
+  PRINT_SPEEDS,
+  PRINT_SPEED_LABELS,
+  type AmsSlot,
+  type FilamentSpool,
+  type FilamentType,
+  type Printer,
+  type PrinterLive,
+  type PrintState,
 } from '@3dapp/shared';
 import { useQueryClient } from '@tanstack/react-query';
-import { Lightbulb, LightbulbOff, PackagePlus, Pause, Play, Square, Undo2 } from 'lucide-react';
-import { useEffect, type ReactNode } from 'react';
+import {
+  Gauge,
+  Lightbulb,
+  LightbulbOff,
+  PackagePlus,
+  Pause,
+  Play,
+  Scissors,
+  Square,
+  Undo2,
+} from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
   useAmsImport,
   useAmsLink,
   useBookings,
   useList,
+  usePrintAdjust,
   usePrinterControl,
   usePrinterLive,
 } from '../api';
-import { Button, ColorDot, ErrorText, Select, cx, dateDe, grams } from './ui';
+import { Button, ColorDot, ErrorText, Modal, Select, cx, dateDe, grams } from './ui';
 
 const STATE_STYLE: Record<PrintState, string> = {
   idle: 'bg-surface-2 text-muted',
@@ -221,9 +234,179 @@ function LiveDetails({ printer, live }: { printer: Printer; live: PrinterLive })
       )}
       <ErrorText error={control.error} />
 
+      {printing && <PrintAdjust printer={printer} live={live} />}
+
       {live.ams.length > 0 && <AmsSlots printerId={printer.id} slots={live.ams} />}
       <Bookings printerId={printer.id} />
     </section>
+  );
+}
+
+/** Geschwindigkeitsstufe umschalten und Teile überspringen – nur während eines Drucks */
+function PrintAdjust({ printer, live }: { printer: Printer; live: PrinterLive }) {
+  const { speed, skip } = usePrintAdjust(printer.id);
+  const [skipping, setSkipping] = useState(false);
+  const skippedCount = live.objects.filter((o) => o.skipped).length;
+
+  return (
+    <div className="space-y-3">
+      {live.speed !== null && (
+        <div>
+          <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted uppercase">
+            <Gauge size={13} /> Geschwindigkeit
+          </h3>
+          <div
+            className="grid grid-cols-4 gap-1 rounded-lg bg-surface-2 p-1"
+            role="group"
+            aria-label="Geschwindigkeit"
+          >
+            {PRINT_SPEEDS.map((s) => {
+              // Nach dem Klick sofort die gewählte Stufe zeigen, bis HA sie bestätigt
+              const active = (speed.isPending ? speed.variables : live.speed) === s;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  aria-pressed={active}
+                  disabled={!live.canSetSpeed || speed.isPending}
+                  onClick={() => !active && speed.mutate(s)}
+                  className={cx(
+                    'rounded-md px-1 py-1.5 text-xs font-medium transition disabled:opacity-60',
+                    active ? 'bg-surface text-main shadow-sm' : 'text-muted hover:text-main',
+                  )}
+                >
+                  {PRINT_SPEED_LABELS[s].label}
+                  <span className="block text-[10px] font-normal tabular-nums">
+                    {PRINT_SPEED_LABELS[s].percent} %
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <ErrorText error={speed.error} />
+        </div>
+      )}
+
+      {(live.canSkip || skippedCount > 0) && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {live.canSkip && (
+            <Button onClick={() => setSkipping(true)}>
+              <Scissors size={15} /> Teile überspringen
+            </Button>
+          )}
+          {skippedCount > 0 && (
+            <span className="text-xs text-muted">
+              {skippedCount} von {live.objects.length} Teilen übersprungen
+            </span>
+          )}
+        </div>
+      )}
+      {skipping && (
+        <SkipDialog
+          printer={printer}
+          live={live}
+          onClose={() => setSkipping(false)}
+          onSkip={(ids) => skip.mutate(ids, { onSuccess: () => setSkipping(false) })}
+          pending={skip.isPending}
+          error={skip.error}
+        />
+      )}
+    </div>
+  );
+}
+
+function SkipDialog({
+  printer,
+  live,
+  onClose,
+  onSkip,
+  pending,
+  error,
+}: {
+  printer: Printer;
+  live: PrinterLive;
+  onClose: () => void;
+  onSkip: (ids: string[]) => void;
+  pending: boolean;
+  error: unknown;
+}) {
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const open = live.objects.filter((o) => !o.skipped);
+  // Mindestens ein Teil muss weitergedruckt werden
+  const tooMany = chosen.size >= open.length;
+  const toggle = (id: string) =>
+    setChosen((c) => {
+      const next = new Set(c);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  return (
+    <Modal
+      title="Teile überspringen"
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Abbrechen</Button>
+          <Button
+            variant="danger"
+            disabled={!chosen.size || tooMany || pending}
+            onClick={() =>
+              confirm(
+                `${chosen.size} ${chosen.size === 1 ? 'Teil' : 'Teile'} nicht weiterdrucken? Das lässt sich nicht rückgängig machen.`,
+              ) && onSkip([...chosen])
+            }
+          >
+            <Scissors size={15} /> {chosen.size || ''} überspringen
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {live.plateVersion && (
+          <img
+            src={`/api/printers/${printer.id}/plate?v=${encodeURIComponent(live.plateVersion)}`}
+            alt="Druckplatte mit den Teilen"
+            className="mx-auto max-h-64 w-full rounded-lg border border-line bg-surface-2 object-contain"
+            onError={(e) => (e.currentTarget.style.display = 'none')}
+          />
+        )}
+        <p className="text-sm text-muted">
+          Die gewählten Teile druckt der Drucker ab jetzt nicht mehr weiter, der Rest läuft normal.
+        </p>
+        <ul className="divide-y divide-[var(--border)] rounded-lg border border-line">
+          {live.objects.map((o) => (
+            <li key={o.id}>
+              <label
+                className={cx(
+                  'flex items-center gap-3 px-3 py-2 text-sm',
+                  o.skipped ? 'text-muted' : 'cursor-pointer',
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[var(--color-accent)]"
+                  disabled={o.skipped}
+                  checked={o.skipped || chosen.has(o.id)}
+                  onChange={() => toggle(o.id)}
+                />
+                <span className="min-w-0 flex-1 truncate">{o.name}</span>
+                <span className="shrink-0 text-xs text-muted tabular-nums">
+                  {o.skipped ? 'übersprungen' : `#${o.id}`}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        {tooMany && chosen.size > 0 && (
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            Mindestens ein Teil muss weitergedruckt werden – für alle bitte den Druck abbrechen.
+          </p>
+        )}
+        <ErrorText error={error} />
+      </div>
+    </Modal>
   );
 }
 

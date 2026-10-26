@@ -19,10 +19,19 @@ export const FAKE_TOKEN = 'test-token';
  */
 export class FakeHa {
   entities: RawEntity[];
-  calls: { domain: string; service: string; entityId: string }[] = [];
+  calls: { domain: string; service: string; entityId?: string; data: Record<string, unknown> }[] =
+    [];
   private server?: Server;
 
-  constructor(fixture: RawEntity[]) {
+  /**
+   * @param printer Präfix der Drucker-Entities (im Fixture „the_one“)
+   * @param ams Präfix der AMS-Entities
+   */
+  constructor(
+    fixture: RawEntity[],
+    readonly printer = 'the_one',
+    readonly ams = 'p1s_01p09a431900844_ams_1',
+  ) {
     this.entities = structuredClone(fixture);
   }
 
@@ -43,25 +52,44 @@ export class FakeHa {
       weight?: number;
       task?: string;
       start?: string;
+      /** Teile auf der Platte als {id: name}; übersprungene werden dabei zurückgesetzt */
+      objects?: Record<string, string>;
     } = {},
   ) {
-    this.set('sensor.the_one_druckstatus', state);
-    for (let s = 1; s <= 4; s++)
-      this.set(`sensor.p1s_01p09a431900844_ams_1_slot_${s}`, null, { active: s === options.slot });
-    if (options.progress !== undefined)
-      this.set('sensor.the_one_druckfortschritt', String(options.progress));
-    if (options.weight !== undefined)
-      this.set('sensor.the_one_gewicht_des_drucks', String(options.weight));
-    if (options.task !== undefined) this.set('sensor.the_one_name_der_aufgabe', options.task);
-    if (options.start !== undefined) this.set('sensor.the_one_startzeit', options.start);
-    const running = state === 'running';
-    this.set('button.the_one_druckvorgang_anhalten', running ? 'unknown' : 'unavailable');
+    if (options.objects) {
+      this.set(
+        `sensor.${this.printer}_druckbare_objekte`,
+        String(Object.keys(options.objects).length),
+        {
+          objects: options.objects,
+        },
+      );
+      this.set(`sensor.${this.printer}_ubersprungene_objekte`, '0', { objects: [] });
+    }
+    const printing = state === 'running' || state === 'pause';
+    const speed = this.entities.find((x) => x.e === `select.${this.printer}_druckgeschwindigkeit`)!;
     this.set(
-      'button.the_one_druckvorgang_beenden',
+      speed.e,
+      printing ? (speed.s === 'unavailable' ? 'standard' : (speed.s ?? 'standard')) : 'unavailable',
+    );
+    this.set(`sensor.${this.printer}_druckstatus`, state);
+    for (let s = 1; s <= 4; s++)
+      this.set(`sensor.${this.ams}_slot_${s}`, null, { active: s === options.slot });
+    if (options.progress !== undefined)
+      this.set(`sensor.${this.printer}_druckfortschritt`, String(options.progress));
+    if (options.weight !== undefined)
+      this.set(`sensor.${this.printer}_gewicht_des_drucks`, String(options.weight));
+    if (options.task !== undefined)
+      this.set(`sensor.${this.printer}_name_der_aufgabe`, options.task);
+    if (options.start !== undefined) this.set(`sensor.${this.printer}_startzeit`, options.start);
+    const running = state === 'running';
+    this.set(`button.${this.printer}_druckvorgang_anhalten`, running ? 'unknown' : 'unavailable');
+    this.set(
+      `button.${this.printer}_druckvorgang_beenden`,
       running || state === 'pause' ? 'unknown' : 'unavailable',
     );
     this.set(
-      'button.the_one_druckvorgang_fortsetzen',
+      `button.${this.printer}_druckvorgang_fortsetzen`,
       state === 'pause' ? 'unknown' : 'unavailable',
     );
   }
@@ -83,9 +111,21 @@ export class FakeHa {
       return { status: 200, type: 'text/plain', body: JSON.stringify(this.entities) };
     const service = /^\/api\/services\/(\w+)\/(\w+)$/.exec(path);
     if (method === 'POST' && service) {
-      const entityId = (JSON.parse(body) as { entity_id: string }).entity_id;
-      this.calls.push({ domain: service[1], service: service[2], entityId });
-      if (service[1] === 'light') this.set(entityId, service[2] === 'turn_on' ? 'on' : 'off');
+      const data = JSON.parse(body) as Record<string, unknown>;
+      const entityId = typeof data.entity_id === 'string' ? data.entity_id : undefined;
+      this.calls.push({ domain: service[1], service: service[2], entityId, data });
+      if (service[1] === 'light') this.set(entityId!, service[2] === 'turn_on' ? 'on' : 'off');
+      if (service[1] === 'select') this.set(entityId!, String(data.option));
+      if (service[1] === 'bambu_lab' && service[2] === 'skip_objects') {
+        const skipped = this.entities.find(
+          (x) => x.e === `sensor.${this.printer}_ubersprungene_objekte`,
+        )!;
+        const ids = [
+          ...(skipped.a.objects as number[]),
+          ...String(data.objects).split(',').map(Number),
+        ];
+        this.set(skipped.e, String(ids.length), { objects: ids });
+      }
       return { status: 200, type: 'application/json', body: '[]' };
     }
     if (method === 'GET' && path.startsWith('/api/image_proxy/')) {

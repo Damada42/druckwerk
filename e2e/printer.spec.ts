@@ -13,7 +13,11 @@ async function setPrint(request: APIRequestContext, state: string, options: obje
 }
 
 async function haCalls(request: APIRequestContext) {
-  return (await (await request.get(`${HA}/test/calls`)).json()) as { entityId: string }[];
+  return (await (await request.get(`${HA}/test/calls`)).json()) as {
+    service: string;
+    entityId?: string;
+    data: Record<string, unknown>;
+  }[];
 }
 
 const p1s = (page: Page) => page.getByRole('region', { name: 'P1S', exact: true });
@@ -22,18 +26,35 @@ let spoolId: number;
 
 test('Home Assistant in den Einstellungen verbinden', async ({ page }) => {
   await page.goto('/einstellungen');
-  await expect(page.getByText('Nicht eingerichtet')).toBeVisible();
-  await page.getByLabel('Adresse').fill(`127.0.0.1:${FAKE_HA_PORT}`);
-  await page.getByLabel('Token').fill('falsch');
   await page.getByRole('button', { name: 'Verbinden' }).click();
-  await expect(page.getByText(/lehnt den Token ab/)).toBeVisible();
+  const form = page.getByRole('form', { name: 'Neuer Standort' });
+  await form.getByLabel('Standort').fill('Zuhause');
+  await form.getByLabel('Adresse').fill(`127.0.0.1:${FAKE_HA_PORT}`);
+  await form.getByLabel('Token').fill('falsch');
+  await form.getByRole('button', { name: 'Verbinden' }).click();
+  await expect(
+    form.getByText('Home Assistant „Zuhause“ lehnt den Token ab', { exact: false }),
+  ).toBeVisible();
 
-  await page.getByLabel('Token').fill('test-token');
-  await page.getByRole('button', { name: 'Verbinden' }).click();
-  await expect(page.getByText('Verbunden (HA 2026.10.4)')).toBeVisible();
-  await expect(page.getByText(/Gefundene Drucker: the_one \(P1S\)/)).toBeVisible();
-  // Token-Feld ist wieder leer, der Token bleibt auf dem Server
-  await expect(page.getByLabel(/Neuer Token/)).toHaveValue('');
+  await form.getByLabel('Token').fill('test-token');
+  await form.getByRole('button', { name: 'Verbinden' }).click();
+  await expect(form).toBeHidden();
+  const row = page.getByRole('listitem', { name: 'Standort Zuhause' });
+  await expect(row.getByText('Verbunden (HA 2026.10.4)')).toBeVisible();
+  await expect(row.getByText(/Gefundene Drucker: the_one \(P1S\)/)).toBeVisible();
+  // Adresse nur gekürzt, Token gar nicht: beides steht nirgends auf der Seite
+  await expect(row.getByText(`http://127.0.•.•:${FAKE_HA_PORT}`)).toBeVisible();
+  const html = await page.content();
+  expect(html).not.toContain(`127.0.0.1:${FAKE_HA_PORT}`);
+  expect(html).not.toContain('test-token');
+
+  // Umbenennen ohne Adresse und Token neu einzugeben
+  await row.getByRole('button', { name: 'Zuhause bearbeiten' }).click();
+  const edit = page.getByRole('form', { name: 'Zuhause bearbeiten' });
+  await expect(edit.getByLabel(/Neue Adresse/)).toHaveValue('');
+  await edit.getByLabel('Standort').fill('Werkstatt');
+  await edit.getByRole('button', { name: 'Speichern' }).click();
+  await expect(page.getByRole('listitem', { name: 'Standort Werkstatt' })).toBeVisible();
 });
 
 test('Drucker verknüpfen: Live-Status und AMS-Slots erscheinen', async ({ page, request }) => {
@@ -115,6 +136,7 @@ test('Laufender Druck: Fortschritt, Pause, Licht – danach automatisch abgebuch
     weight: 25,
     task: 'E2E-Halter',
     start: 'e2e-1',
+    objects: { '95': 'Halter links', '409': 'Halter rechts', '1463': 'Deckel' },
   });
   // Im Leerlauf fragt die Seite nur alle 15 s nach: warten, bis der Server den Druck kennt, dann neu laden
   await expect
@@ -138,6 +160,37 @@ test('Laufender Druck: Fortschritt, Pause, Licht – danach automatisch abgebuch
   await expect(card.getByRole('button', { name: 'Licht ausschalten' })).toBeVisible({
     timeout: 10_000,
   });
+
+  // Geschwindigkeit: Standard ist aktiv, auf Sport umschalten
+  const speeds = card.getByRole('group', { name: 'Geschwindigkeit' });
+  await expect(speeds.getByRole('button', { name: /Standard/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await speeds.getByRole('button', { name: /Sport/ }).click();
+  await expect
+    .poll(async () => (await haCalls(request)).at(-1))
+    .toMatchObject({ service: 'select_option', data: { option: 'sport' } });
+  await expect(speeds.getByRole('button', { name: /Sport/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+    {
+      timeout: 10_000,
+    },
+  );
+
+  // Teile überspringen: „Halter links“ wählen, Rückfrage bestätigen
+  await card.getByRole('button', { name: 'Teile überspringen' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Teile überspringen' });
+  await expect(dialog.getByRole('img', { name: 'Druckplatte mit den Teilen' })).toBeVisible();
+  await dialog.getByLabel('Halter links').check();
+  page.once('dialog', (d) => d.accept());
+  await dialog.getByRole('button', { name: '1 überspringen' }).click();
+  await expect(dialog).toBeHidden();
+  await expect
+    .poll(async () => (await haCalls(request)).at(-1))
+    .toMatchObject({ service: 'skip_objects', data: { objects: '95' } });
+  await expect(card.getByText('1 von 3 Teilen übersprungen')).toBeVisible({ timeout: 10_000 });
 
   // Der Server muss den aktiven Slot mindestens einmal beim Drucken gesehen haben
   await page.waitForTimeout(1500);

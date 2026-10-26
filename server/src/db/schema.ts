@@ -147,7 +147,16 @@ export const projectCosts = sqliteTable('project_costs', {
   unitPrice: real('unit_price').notNull().default(0),
 });
 
-/** Einfache Schlüssel-Wert-Einstellungen, z.B. Home-Assistant-Adresse und Token */
+/** Verbindungen zu Home Assistant – eine pro Standort. Adresse und Token verlassen den Server nie. */
+export const haConnections = sqliteTable('ha_connections', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  url: text('url').notNull(),
+  token: text('token').notNull(),
+  createdAt: createdAt(),
+});
+
+/** Einfache Schlüssel-Wert-Einstellungen */
 export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),

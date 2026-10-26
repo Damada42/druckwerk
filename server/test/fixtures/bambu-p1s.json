@@ -358,5 +358,40 @@
     "n": "the_one",
     "s": "01P09A431900844",
     "v": null
+  },
+  {
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "m": "P1S",
+    "n": "the_one",
+    "v": null,
+    "e": "select.the_one_druckgeschwindigkeit",
+    "s": "unavailable",
+    "a": {
+      "options": ["silent", "standard", "sport", "ludicrous"]
+    }
+  },
+  {
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "m": "P1S",
+    "n": "the_one",
+    "v": null,
+    "e": "sensor.the_one_druckbare_objekte",
+    "s": "1",
+    "a": {
+      "objects": {
+        "95": "HolyCase V5.step"
+      }
+    }
+  },
+  {
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "m": "P1S",
+    "n": "the_one",
+    "v": null,
+    "e": "sensor.the_one_ubersprungene_objekte",
+    "s": "0",
+    "a": {
+      "objects": []
+    }
   }
 ]

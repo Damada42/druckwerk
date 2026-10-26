@@ -10,6 +10,8 @@ export interface HaEntity {
   viaDeviceId: string | null;
   deviceName: string | null;
   model: string | null;
+  /** Von welcher Home-Assistant-Verbindung (Standort) die Entity stammt */
+  connectionId?: number;
 }
 
 /** Ein in Home Assistant gefundener Drucker (zur Auswahl beim Verknüpfen) */
@@ -17,6 +19,8 @@ export interface HaPrinterDevice {
   id: string;
   name: string;
   model: string;
+  /** Standort-Name der Verbindung, z.B. „Zuhause“ */
+  location?: string;
 }
 
 export const PRINT_STATES = [
@@ -93,7 +97,34 @@ export interface PrinterLive {
   canPause: boolean;
   canResume: boolean;
   canStop: boolean;
+  /** Aktuelle Geschwindigkeitsstufe; null = Drucker meldet keine (z.B. im Leerlauf) */
+  speed: PrintSpeed | null;
+  canSetSpeed: boolean;
+  /** Teile auf der Druckplatte des aktuellen Auftrags */
+  objects: PrintObject[];
+  /** Überspringen geht nur während eines Drucks und solange danach noch ein Teil übrig bleibt */
+  canSkip: boolean;
+  /** Stand des Plattenbilds mit markierten Teilen, null = keins */
+  plateVersion: string | null;
   ams: AmsSlot[];
+}
+
+export const PRINT_SPEEDS = ['silent', 'standard', 'sport', 'ludicrous'] as const;
+export type PrintSpeed = (typeof PRINT_SPEEDS)[number];
+
+/** Bambu-Stufen mit ihrem Tempo relativ zu Standard */
+export const PRINT_SPEED_LABELS: Record<PrintSpeed, { label: string; percent: number }> = {
+  silent: { label: 'Leise', percent: 50 },
+  standard: { label: 'Standard', percent: 100 },
+  sport: { label: 'Sport', percent: 124 },
+  ludicrous: { label: 'Ludicrous', percent: 166 },
+};
+
+export interface PrintObject {
+  /** ID im Druckauftrag, für den Überspringen-Befehl */
+  id: string;
+  name: string;
+  skipped: boolean;
 }
 
 /** Rollen der Entities eines Druckers; Endungen der Entity-IDs auf Deutsch und Englisch */
@@ -117,6 +148,10 @@ const ROLES = {
   pause: ['button', ['druckvorgang_anhalten', 'pause_printing', 'pause']],
   resume: ['button', ['druckvorgang_fortsetzen', 'resume_printing', 'resume']],
   stop: ['button', ['druckvorgang_beenden', 'stop_printing', 'stop']],
+  speed: ['select', ['druckgeschwindigkeit', 'printing_speed', 'print_speed']],
+  objects: ['sensor', ['druckbare_objekte', 'printable_objects']],
+  skipped: ['sensor', ['ubersprungene_objekte', 'skipped_objects']],
+  plate: ['image', ['bild_wahlen', 'pick_image']],
 } as const satisfies Record<string, readonly [string, readonly string[]]>;
 
 export type PrinterRole = keyof typeof ROLES;
@@ -235,6 +270,7 @@ export function parsePrinterLive(entities: HaEntity[], deviceId: string): Printe
     return s !== null && s !== 'unavailable';
   };
   const light = value('light');
+  const objects = printObjects(get('objects'), get('skipped'));
 
   return {
     online,
@@ -257,8 +293,31 @@ export function parsePrinterLive(entities: HaEntity[], deviceId: string): Printe
     canPause: usable('pause') && state === 'running',
     canResume: usable('resume') && state === 'pause',
     canStop: usable('stop') && (ACTIVE_PRINT_STATES as readonly string[]).includes(state),
+    speed: (PRINT_SPEEDS as readonly string[]).includes(value('speed') ?? '')
+      ? (value('speed') as PrintSpeed)
+      : null,
+    canSetSpeed: usable('speed') && (state === 'running' || state === 'pause'),
+    objects,
+    canSkip:
+      (state === 'running' || state === 'pause') && objects.filter((o) => !o.skipped).length > 1,
+    plateVersion: get('plate')?.attributes.entity_picture ? (text(value('plate')) ?? 'x') : null,
     ams: amsSlots(mine),
   };
+}
+
+/** Teile des Auftrags: „objects“ ist {id: name}, übersprungene kommen als Liste von IDs */
+function printObjects(printable?: HaEntity, skipped?: HaEntity): PrintObject[] {
+  const raw = printable?.attributes.objects;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+  const skippedRaw = skipped?.attributes.objects;
+  const done = new Set(
+    (Array.isArray(skippedRaw) ? skippedRaw : Object.keys(skippedRaw ?? {})).map(String),
+  );
+  return Object.entries(raw as Record<string, unknown>).map(([id, name]) => ({
+    id,
+    name: typeof name === 'string' && name ? name : `Teil ${id}`,
+    skipped: done.has(id),
+  }));
 }
 
 /** Automatisch vom Server gebuchter Filamentverbrauch eines Druckauftrags */
@@ -282,16 +341,39 @@ export type PrinterLiveResponse =
   | { status: 'ok'; live: PrinterLive };
 
 /** Verbindungsstand zu Home Assistant (der Token selbst verlässt den Server nie) */
-export interface HaSettings {
-  url: string | null;
-  hasToken: boolean;
-}
-
-export interface HaStatus extends HaSettings {
+/** Eine Home-Assistant-Verbindung (Standort), wie sie der Browser sieht */
+export interface HaConnectionStatus {
+  id: number;
+  name: string;
+  /** Teilweise unkenntlich gemacht – die volle Adresse und der Token bleiben auf dem Server */
+  url: string;
   ok: boolean;
   error?: string;
   version?: string;
   printers: HaPrinterDevice[];
+}
+
+export interface HaStatus {
+  connections: HaConnectionStatus[];
+}
+
+/**
+ * Adresse für die Anzeige teilweise unkenntlich machen: vom ersten Namensteil bleiben drei
+ * Zeichen, bei IP-Adressen die ersten beiden Blöcke. Domain und Port bleiben zur Orientierung.
+ * „https://abcdefg….ui.nabu.casa“ → „https://abc•••.ui.nabu.casa“
+ */
+export function maskUrl(raw: string): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return '•••';
+  }
+  const host = url.hostname;
+  const masked = /^\d+\.\d+\.\d+\.\d+$/.test(host)
+    ? host.split('.').slice(0, 2).concat('•', '•').join('.')
+    : [`${host.split('.')[0].slice(0, 3)}•••`, ...host.split('.').slice(1)].join('.');
+  return `${url.protocol}//${masked}${url.port ? `:${url.port}` : ''}`;
 }
 
 export const PRINTER_ACTIONS = ['pause', 'resume', 'stop', 'light_on', 'light_off'] as const;
