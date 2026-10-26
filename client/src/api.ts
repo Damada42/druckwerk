@@ -1,3 +1,11 @@
+import {
+  ACTIVE_PRINT_STATES,
+  type FilamentBooking,
+  type HaSettings,
+  type HaStatus,
+  type PrinterAction,
+  type PrinterLiveResponse,
+} from '@3dapp/shared';
 import type {
   BarcodeLookup,
   SpoolBatchInput,
@@ -69,6 +77,8 @@ export function useSave<R extends ResourceName>(name: R) {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: [name] });
     qc.invalidateQueries({ queryKey: ['stats'] });
+    // Verknüpfung mit Home Assistant kann sich geändert haben
+    if (name === 'printers') qc.invalidateQueries({ queryKey: ['printer-live'] });
   };
   const save = useMutation({
     mutationFn: ({ id, ...data }: Partial<Input<Resources[R]>> & { id?: number }) =>
@@ -149,6 +159,98 @@ export function useSpoolBatch() {
       qc.invalidateQueries({ queryKey: ['barcode'] });
     },
   });
+}
+
+export function useHaStatus() {
+  return useQuery({
+    queryKey: ['ha-status'],
+    queryFn: () => api.get<HaStatus>('/ha/status'),
+    staleTime: 30_000,
+  });
+}
+
+export function useHaSettings() {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['ha-status'] });
+    qc.invalidateQueries({ queryKey: ['printer-live'] });
+  };
+  const save = useMutation({
+    mutationFn: (body: { url: string; token?: string }) =>
+      api.put<HaSettings>('/ha/settings', body),
+    onSuccess: invalidate,
+  });
+  const disconnect = useMutation({
+    mutationFn: () => api.del('/ha/settings'),
+    onSuccess: invalidate,
+  });
+  return { save, disconnect };
+}
+
+/** Live-Status eines Druckers; fragt alle paar Sekunden nach, schneller während eines Drucks */
+export function usePrinterLive(printerId: number) {
+  return useQuery({
+    queryKey: ['printer-live', printerId],
+    queryFn: () => api.get<PrinterLiveResponse>(`/printers/${printerId}/live`),
+    refetchInterval: (q) => {
+      const data = q.state.data;
+      if (!data || data.status === 'unconfigured' || data.status === 'unlinked') return false;
+      if (data.status === 'error') return 30_000;
+      return (ACTIVE_PRINT_STATES as readonly string[]).includes(data.live.state) ? 5_000 : 15_000;
+    },
+  });
+}
+
+export function usePrinterControl(printerId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (action: PrinterAction) =>
+      api.post<void>(`/printers/${printerId}/control`, { action }),
+    // Home Assistant braucht einen Moment, bis der Drucker den neuen Zustand meldet
+    onSuccess: () =>
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['printer-live', printerId] }), 1500),
+  });
+}
+
+export function useAmsLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { entityId: string; spoolId: number | null }) =>
+      api.post<void>('/ams-link', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['spools'] }),
+  });
+}
+
+/** Spule aus einem AMS-Slot in den Bestand übernehmen (und dem Slot zuordnen) */
+export function useAmsImport(printerId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (entityId: string) =>
+      api.post<FilamentSpool>('/ams-import', { printerId, entityId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['spools'] });
+      qc.invalidateQueries({ queryKey: ['filament-types'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+    },
+  });
+}
+
+export function useBookings(printerId: number) {
+  const qc = useQueryClient();
+  const list = useQuery({
+    queryKey: ['bookings', printerId],
+    queryFn: () => api.get<FilamentBooking[]>(`/bookings?printerId=${printerId}`),
+    refetchInterval: 60_000,
+  });
+  const undo = useMutation({
+    mutationFn: (id: number) => api.del(`/bookings/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bookings'] });
+      qc.invalidateQueries({ queryKey: ['spools'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+    },
+  });
+  return { list, undo };
 }
 
 export function useConsume() {

@@ -16,7 +16,7 @@ Requires Node 22+. On this Windows machine, PowerShell calls may need the PATH r
 - `npm run e2e`: builds the client first, then runs Playwright with the installed Chrome (`channel: 'chrome'`, no browser download). It starts its own server on port 3200 with a temporary `DATA_DIR`. Tests in a project share one database and run sequentially, so later specs depend on earlier ones. For a single spec, run `npx playwright test e2e/scan.spec.ts --project desktop`, but only after `npm run build`.
 - `npm run db:generate -w server`: after changing `server/src/db/schema.ts`, generate a migration in `server/drizzle/`. Migrations run automatically on server start.
 
-Env vars: `API_PORT` (default 3000; deliberately not `PORT`, which the preview tooling sets), `HOST`, `DATA_DIR` (default `server/data`: DB, uploads, certs, `client-log.jsonl`), `HTTPS=false` to disable TLS.
+Env vars: `API_PORT` (default 3000; deliberately not `PORT`, which the preview tooling sets), `HOST`, `DATA_DIR` (default `server/data`: DB, uploads, certs, `client-log.jsonl`), `HTTPS=false` to disable TLS, `HA_POLL_MS` (default 20000; the e2e server uses 500).
 
 ## Architecture
 
@@ -30,6 +30,7 @@ The repo is an npm-workspaces monorepo: `shared/`, `server/`, `client/`.
 - Cost math used by both sides: `calcPrinterHourly` (electricity + wear + maintenance per hour) and `calcProjectCosts` (filament + print hours × hourly rate + extras).
 - `label.ts`: `parseSpoolLabel` turns OCR text into a filament guess (type, manufacturer, color, finish, weight, diameter).
 - `invoice.ts`: `parseInvoice` extracts the gross total (keyword tiers, so subtotal, VAT and shipping are skipped), invoice date, number, vendor and item names from invoice text. Items come from the line-item table (header found by description/quantity/price columns, tolerant of OCR garbling); `describeInvoice` turns them into the description, e.g. "Hama Steckdosenleiste … (Amazon)". Unit tests live in `server/test/invoice.test.ts`, since only the server has vitest.
+- `printer.ts`: `parsePrinterLive` turns Home Assistant entities of the `bambu_lab` integration into a `PrinterLive` status. Entities are matched by entity-id suffix in German and English (the user's HA runs in German: `sensor.the_one_druckstatus`), with a leading `_` so `temperatur_der_duse` doesn't also match `zieltemperatur_der_duse`. AMS slots and the external spool are found by their attributes (`tray_uuid`, `slot`), not by name. AMS units are separate HA devices linked to the printer via `via_device_id`.
 
 ### server/
 
@@ -43,6 +44,15 @@ Fastify 5 + better-sqlite3 + drizzle-orm.
 - `routes/clientLog.ts`: `POST /api/client-log` receives browser diagnostics, writes them to the server log and appends them to `DATA_DIR/client-log.jsonl`. When debugging phone behavior, read that file. The `sample` field holds a JPEG data URL of what the live scanner saw (`scan-live`), or the first 6000 characters of recognized text (`invoice-read`), so parser misreads can be turned into unit tests.
 - `src/cert.ts` `ensureCert` generates and caches a self-signed certificate covering localhost, the hostname and LAN IPs. The Vite dev server reuses the same certificate from `server/data/certs`.
 - In production the server also serves `client/dist` with an SPA fallback, plus `/uploads`.
+- Home Assistant (`src/ha/`, `routes/ha.ts`):
+  - `client.ts` stores URL and long-lived token in the `settings` table. The token is never sent to the browser.
+  - It fetches all Bambu entities in one `POST /api/template` request (`BAMBU_TEMPLATE`). The template only copies whitelisted attributes, because some HA attributes (sets) can't be serialized with `tojson`.
+  - Entity results are cached for 2 s for browser polling; the watcher always passes `fresh: true`.
+  - `tracker.ts` `PrintTracker` is pure. It credits the time between two polls to the AMS slot that was printing at the start of that interval. When a job ends it returns a `BookingPlan`: full print weight on finish, weight × progress when the job fails, split by slot time when several slots printed.
+  - `watcher.ts` runs the tracker every `haPollMs`. `bookPlan` deducts from the spool whose `haTrayEntity` equals the slot entity. `filament_bookings` has a unique index on (job key, spool), so a job is never booked twice. A booking can be undone with `DELETE /api/bookings/:id`.
+  - `POST /api/ams-import` creates a spool from live AMS slot data and links it to the slot. The manufacturer, type and finish come from `parseSpoolLabel` on the slot name; the color name comes from `colorNameFromHex` in `label.ts`, which uses hue, saturation and lightness bands (tested against Bambu's palette).
+  - `buildApp` returns `{ app, db, ha, watcher }`. Tests pass `haFetch` and call `watcher.tick(now)` manually.
+  - `server/test/fake-ha.ts` (`FakeHa`) emulates HA from a fixture of the user's real P1S data (`test/fixtures/bambu-p1s.json`). The e2e global setup runs it as an HTTP server on port 3299; `POST /test/print` and `GET /test/calls` steer and inspect it.
 
 ### client/
 
@@ -50,6 +60,7 @@ React 19, Vite 7, Tailwind v4 (tokens in `index.css`), React Router 7 and TanSta
 
 - `src/api.ts` holds all data hooks (`useList`, `useSave`, an optimistic `useMoveProject`, …).
 - `components/ui.tsx` holds the shared primitives and German formatters (`euro`, `grams`, `dateDe`).
+- `ColorDot` draws on a `<canvas>` on purpose. Samsung Internet's forced dark mode recolors CSS backgrounds, SVG and even `<img>` swatches: large dots get darkened (white turned black), small ones lightened. Neither `<meta name="color-scheme">` nor `color-scheme: only light` stops this. A test page on the user's phone showed that canvas content stays untouched. Draw any new filament color swatch with `ColorDot`.
 - The Kanban board uses @dnd-kit with separate Mouse and Touch sensors (a PointerSensor gets cancelled by the browser's scroll on phones; touch drags start after a 250 ms press). After a drop the board keeps the new arrangement until the move is confirmed, otherwise the drop animation flies back to the old spot.
 - Scanning lives in `src/scan/` and `pages/ScanDialog.tsx` / `ScanSpoolForm.tsx`. These modules are lazy-loaded.
   - `barcode.ts` prefers the browser's native `BarcodeDetector` (secure context only; present on Android, absent on desktop Chrome/Windows) with ZXing as a fallback.
@@ -74,4 +85,5 @@ React 19, Vite 7, Tailwind v4 (tokens in `index.css`), React Router 7 and TanSta
 
 - Target device: the user's phone, Samsung Internet on Android 10. Chrome on the phone fails to connect.
 - The server is reached at `https://<PC-IP>:3000` on the LAN. The phone only sees client changes after the `npm run prod` server has been restarted (it rebuilds the client), followed by a page reload on the phone.
-- Roadmap: phases 1 (core + Kanban), 2 (filament scan) and 3 (invoice reading) are done. Phase 4 is Home Assistant live status for the Bambu Lab P1S.
+- Roadmap: phases 1 (core + Kanban), 2 (filament scan), 3 (invoice reading) and 4 (Home Assistant live status, control, AMS linking and automatic filament deduction for the Bambu Lab P1S) are done.
+- The user's Home Assistant is reachable through the HA MCP tools in this environment. Use them (read-only) to look at real entity data, e.g. `ha_eval_template` with `BAMBU_TEMPLATE`. Never put the user's token anywhere; the user enters it in the app.

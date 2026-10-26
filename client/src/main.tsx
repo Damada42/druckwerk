@@ -12,7 +12,6 @@ import { FilamentPage } from './pages/Filament';
 import { PrintersPage } from './pages/Printers';
 import { ProjectsPage } from './pages/Projects';
 import { SettingsPage } from './pages/Settings';
-
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 10_000, refetchOnWindowFocus: true } },
 });
@@ -26,6 +25,7 @@ clientLog('app-start', {
   navigation: (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming)?.type,
   memoryGB: (navigator as { deviceMemory?: number }).deviceMemory,
   screen: `${screen.width}x${screen.height}`,
+  prefersDark: matchMedia('(prefers-color-scheme: dark)').matches,
 });
 
 createRoot(document.getElementById('root')!).render(

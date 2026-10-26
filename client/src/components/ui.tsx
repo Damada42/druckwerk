@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { useEffect, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useRef, type ComponentProps, type ReactNode } from 'react';
 
 export const euro = (n: number | null | undefined) =>
   n === null || n === undefined
@@ -118,11 +118,30 @@ export function ColorDot({
   size?: number;
   title?: string;
 }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  // Auf einer Canvas gezeichnet: Der Dunkelmodus von Samsung Internet färbt CSS-Flächen, SVGs
+  // und sogar Bilder um (Weiß wurde schwarz), Canvas-Inhalte aber nicht – per Farbtest am Handy geprüft.
+  useEffect(() => {
+    const canvas = ref.current!;
+    const scale = window.devicePixelRatio || 1;
+    canvas.width = Math.round(size * scale);
+    canvas.height = Math.round(size * scale);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, Math.PI * 2);
+    ctx.fill();
+  }, [color, size]);
   return (
-    <span
+    <canvas
+      ref={ref}
       title={title}
+      role="img"
+      aria-label={title}
       className="inline-block shrink-0 rounded-full ring-1 ring-black/15 dark:ring-white/20"
-      style={{ width: size, height: size, backgroundColor: color }}
+      style={{ width: size, height: size }}
     />
   );
 }

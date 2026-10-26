@@ -132,6 +132,7 @@ export interface FilamentSpool {
   price: number | null;
   purchaseDate: string | null;
   location: string | null;
+  /** AMS-Slot (Entity-ID in Home Assistant), in dem die Spule gerade steckt */
   haTrayEntity: string | null;
   /** Barcode (EAN) der Sorte, falls per Scan angelegt */
   barcode: string | null;
@@ -145,7 +146,8 @@ export interface Printer {
   model: string;
   nozzle: number;
   hasAms: boolean;
-  haEntityPrefix: string | null;
+  /** Verknüpftes Gerät in Home Assistant (Device-ID) für den Live-Status */
+  haDeviceId: string | null;
   notes: string | null;
   /** Kostenparameter für die Maschinenstunde */
   powerW: number | null;
@@ -287,3 +289,4 @@ export function calcProjectCosts(
 
 export * from './invoice';
 export * from './label';
+export * from './printer';

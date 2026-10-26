@@ -7,6 +7,8 @@ const PORT = 3200;
 const DATA_DIR = path.join(tmpdir(), `druckwerk-e2e-${Date.now()}`);
 /** Virtuelles Kamerabild mit Barcode, erzeugt in global-setup.ts */
 export const FAKE_CAMERA = path.join(tmpdir(), 'druckwerk-fake-camera.mjpeg');
+/** Nachgebautes Home Assistant aus global-setup.ts */
+export const FAKE_HA_PORT = 3299;
 
 export default defineConfig({
   testDir: './e2e',
@@ -64,6 +66,7 @@ export default defineConfig({
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,
     timeout: 60_000,
-    env: { API_PORT: String(PORT), DATA_DIR, HOST: '127.0.0.1' },
+    // HA_POLL_MS: Druckende schnell erkennen, damit der Abbuchungs-Test nicht 20 s wartet
+    env: { API_PORT: String(PORT), DATA_DIR, HOST: '127.0.0.1', HA_POLL_MS: '500' },
   },
 });

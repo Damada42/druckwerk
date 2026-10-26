@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { CostCategory, InvoiceType, MemberRole, Priority, ProjectStatus } from '@3dapp/shared';
 
 const createdAt = () =>
@@ -81,7 +81,8 @@ export const printers = sqliteTable('printers', {
   model: text('model').notNull(),
   nozzle: real('nozzle').notNull().default(0.4),
   hasAms: integer('has_ams', { mode: 'boolean' }).notNull().default(false),
-  haEntityPrefix: text('ha_entity_prefix'),
+  /** Device-ID in Home Assistant für Live-Status und Steuerung */
+  haDeviceId: text('ha_device_id'),
   notes: text('notes'),
   powerW: real('power_w'),
   electricityPrice: real('electricity_price'),
@@ -145,6 +146,31 @@ export const projectCosts = sqliteTable('project_costs', {
   quantity: real('quantity').notNull().default(1),
   unitPrice: real('unit_price').notNull().default(0),
 });
+
+/** Einfache Schlüssel-Wert-Einstellungen, z.B. Home-Assistant-Adresse und Token */
+export const settings = sqliteTable('settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+});
+
+/** Vom Server nach einem Druck automatisch abgebuchtes Filament (zum Nachvollziehen/Rückgängigmachen) */
+export const filamentBookings = sqliteTable(
+  'filament_bookings',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    spoolId: integer('spool_id')
+      .notNull()
+      .references(() => filamentSpools.id, { onDelete: 'cascade' }),
+    printerId: integer('printer_id').references(() => printers.id, { onDelete: 'set null' }),
+    grams: real('grams').notNull(),
+    jobName: text('job_name'),
+    /** Kennung des Druckauftrags; verhindert doppeltes Abbuchen */
+    jobKey: text('job_key').notNull(),
+    estimated: integer('estimated', { mode: 'boolean' }).notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('filament_bookings_job_spool').on(t.jobKey, t.spoolId)],
+);
 
 export const invoices = sqliteTable('invoices', {
   id: integer('id').primaryKey({ autoIncrement: true }),

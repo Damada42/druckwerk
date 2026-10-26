@@ -1,7 +1,9 @@
 import { chromium } from '@playwright/test';
 import bwipjs from 'bwip-js';
-import { writeFileSync } from 'node:fs';
-import { FAKE_CAMERA } from '../playwright.config';
+import { readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { FAKE_CAMERA, FAKE_HA_PORT } from '../playwright.config';
+import { FakeHa, type RawEntity } from '../server/test/fake-ha';
 
 export const LIVE_EAN = '9783161484100';
 
@@ -28,4 +30,12 @@ export default async function globalSetup() {
   const frame = await page.screenshot({ type: 'jpeg', quality: 92 });
   await browser.close();
   writeFileSync(FAKE_CAMERA, Buffer.concat(Array.from({ length: 30 }, () => frame)));
+
+  // Nachgebautes Home Assistant mit den echten P1S-Daten aus den Server-Tests
+  const fixture = JSON.parse(
+    readFileSync(path.join(__dirname, '../server/test/fixtures/bambu-p1s.json'), 'utf8'),
+  ) as RawEntity[];
+  const ha = new FakeHa(fixture);
+  await ha.listen(FAKE_HA_PORT);
+  return () => ha.close();
 }

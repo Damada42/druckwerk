@@ -18,7 +18,9 @@ export function registerClientLogRoutes(app: FastifyInstance, file?: string) {
     req.log.info({ client }, `client: ${event}`);
     if (file) {
       const line = JSON.stringify({ time: new Date().toISOString(), ...client });
-      await appendFile(file, line + '\n').catch((e) => req.log.warn(e, 'client-log nicht schreibbar'));
+      await appendFile(file, line + '\n').catch((e) =>
+        req.log.warn(e, 'client-log nicht schreibbar'),
+      );
     }
     return reply.code(204).send();
   });

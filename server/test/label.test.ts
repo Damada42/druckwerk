@@ -1,5 +1,25 @@
-import { manufacturerFromUrl, parseSpoolLabel } from '@3dapp/shared';
+import { colorNameFromHex, manufacturerFromUrl, parseSpoolLabel } from '@3dapp/shared';
 import { describe, expect, it } from 'vitest';
+
+describe('Farbname aus Farbwert', () => {
+  it('benennt die Farben im AMS von Markus und typische Bambu-Farben', () => {
+    expect(colorNameFromHex('#FF671FFF')).toBe('Orange');
+    expect(colorNameFromHex('#FFFFFFFF')).toBe('Weiß');
+    expect(colorNameFromHex('#0A2989FF')).toBe('Dunkelblau');
+    expect(colorNameFromHex('#E4BD68FF')).toBe('Gold');
+    expect(colorNameFromHex('#000000')).toBe('Schwarz');
+    expect(colorNameFromHex('#8E9089')).toBe('Grau');
+    expect(colorNameFromHex('#C12E1F')).toBe('Rot');
+    expect(colorNameFromHex('#F4EE2A')).toBe('Gelb');
+    expect(colorNameFromHex('#00AE42')).toBe('Grün');
+    expect(colorNameFromHex('#0086D6')).toBe('Blau');
+    expect(colorNameFromHex('#5E43B7')).toBe('Lila');
+    expect(colorNameFromHex('#F55A74')).toBe('Pink');
+    expect(colorNameFromHex('#9D432C')).toBe('Braun');
+    expect(colorNameFromHex('#F7E6DE')).toBe('Beige');
+    expect(colorNameFromHex(null)).toBeUndefined();
+  });
+});
 
 const ctx = {
   types: ['PLA', 'PETG', 'TPU', 'ABS', 'ASA', 'PA', 'PC', 'PVA', 'PLA-CF'],

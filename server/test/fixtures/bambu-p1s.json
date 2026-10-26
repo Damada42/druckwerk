@@ -1,0 +1,362 @@
+[
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "binary_sensor.the_one_online",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "on",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "binary_sensor.the_one_druckfehler",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "off",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "e0f46f132bda8171bb9eb5c438684ab0",
+    "e": "binary_sensor.p1s_01p09a431900844_ams_1_aktiv",
+    "m": "AMS",
+    "n": "P1S_01P09A431900844_AMS_1",
+    "s": "off",
+    "v": "671ed8fd7336dc7aba6d6faa4470f6e6"
+  },
+  {
+    "a": {},
+    "d": "b9f4374c311cd408b1ed90eb9a9334ad",
+    "e": "binary_sensor.the_one_externalspool_aktiv",
+    "m": "External Spool",
+    "n": "the_one_externalspool",
+    "s": "off",
+    "v": "671ed8fd7336dc7aba6d6faa4470f6e6"
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "button.the_one_druckvorgang_anhalten",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "unavailable",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "button.the_one_druckvorgang_fortsetzen",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "unavailable",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "button.the_one_druckvorgang_beenden",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "unavailable",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "button.the_one_aktualisierung_erzwingen",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "unknown",
+    "v": null
+  },
+  {
+    "a": {
+      "entity_picture": "/api/camera_proxy/camera.the_one_camera?token=test"
+    },
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "camera.the_one_camera",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "streaming",
+    "v": null
+  },
+  {
+    "a": {
+      "entity_picture": "/api/image_proxy/image.the_one_titelbild?token=test"
+    },
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "image.the_one_titelbild",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "2026-10-26T00:49:29.536174",
+    "v": null
+  },
+  {
+    "a": {
+      "entity_picture": "/api/image_proxy/image.the_one_bild_wahlen?token=test"
+    },
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "image.the_one_bild_wahlen",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "2026-10-26T00:49:29.580973",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "light.the_one_druckraumbeleuchtung",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "off",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "number.the_one_zieltemperatur_der_duse",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "0",
+    "v": null
+  },
+  {
+    "a": {
+      "active": false,
+      "color": "#FFFFFF00",
+      "empty": true,
+      "name": "?",
+      "remain": -1,
+      "tray_uuid": "00000000000000000000000000000000",
+      "type": "?"
+    },
+    "d": "b9f4374c311cd408b1ed90eb9a9334ad",
+    "e": "sensor.the_one_externalspool_externe_spule",
+    "m": "External Spool",
+    "n": "the_one_externalspool",
+    "s": "?",
+    "v": "671ed8fd7336dc7aba6d6faa4470f6e6"
+  },
+  {
+    "a": {},
+    "d": "e0f46f132bda8171bb9eb5c438684ab0",
+    "e": "sensor.p1s_01p09a431900844_ams_1_luftfeuchtigkeit",
+    "m": "AMS",
+    "n": "P1S_01P09A431900844_AMS_1",
+    "s": "31",
+    "v": "671ed8fd7336dc7aba6d6faa4470f6e6"
+  },
+  {
+    "a": {
+      "active": false,
+      "color": "#FF671FFF",
+      "empty": false,
+      "name": "Bambu PETG Basic",
+      "remain": 99,
+      "slot": 1,
+      "tray_uuid": "38CF31FEC03D49B79AAE70E0B5D97C66",
+      "type": "PETG",
+      "tray_weight": "1000"
+    },
+    "d": "e0f46f132bda8171bb9eb5c438684ab0",
+    "e": "sensor.p1s_01p09a431900844_ams_1_slot_1",
+    "m": "AMS",
+    "n": "P1S_01P09A431900844_AMS_1",
+    "s": "Bambu PETG Basic",
+    "v": "671ed8fd7336dc7aba6d6faa4470f6e6"
+  },
+  {
+    "a": {
+      "active": false,
+      "color": "#FFFFFFFF",
+      "empty": false,
+      "name": "Bambu PLA Basic",
+      "remain": 100,
+      "slot": 2,
+      "tray_uuid": "584793371BC1400EA954BEC35D55E37B",
+      "type": "PLA",
+      "tray_weight": "1000"
+    },
+    "d": "e0f46f132bda8171bb9eb5c438684ab0",
+    "e": "sensor.p1s_01p09a431900844_ams_1_slot_2",
+    "m": "AMS",
+    "n": "P1S_01P09A431900844_AMS_1",
+    "s": "Bambu PLA Basic",
+    "v": "671ed8fd7336dc7aba6d6faa4470f6e6"
+  },
+  {
+    "a": {
+      "active": false,
+      "color": "#0A2989FF",
+      "empty": false,
+      "name": "Bambu PLA Basic",
+      "remain": 61,
+      "slot": 3,
+      "tray_uuid": "589D089FA84F40B082E03F352CB6E095",
+      "type": "PLA",
+      "tray_weight": "1000"
+    },
+    "d": "e0f46f132bda8171bb9eb5c438684ab0",
+    "e": "sensor.p1s_01p09a431900844_ams_1_slot_3",
+    "m": "AMS",
+    "n": "P1S_01P09A431900844_AMS_1",
+    "s": "Bambu PLA Basic",
+    "v": "671ed8fd7336dc7aba6d6faa4470f6e6"
+  },
+  {
+    "a": {
+      "active": false,
+      "color": "#E4BD68FF",
+      "empty": false,
+      "name": "Bambu PLA Basic",
+      "remain": 88,
+      "slot": 4,
+      "tray_uuid": "4DFF2185841444A4812DDB08F6FA285E",
+      "type": "PLA",
+      "tray_weight": "1000"
+    },
+    "d": "e0f46f132bda8171bb9eb5c438684ab0",
+    "e": "sensor.p1s_01p09a431900844_ams_1_slot_4",
+    "m": "AMS",
+    "n": "P1S_01P09A431900844_AMS_1",
+    "s": "Bambu PLA Basic",
+    "v": "671ed8fd7336dc7aba6d6faa4470f6e6"
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_druckbetttemperatur",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "25",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_zieltemperatur_des_druckbett",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "0",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_temperatur_der_duse",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "29",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_zieltemperatur_der_duse",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "0",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_druckfortschritt",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "0",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_druckstatus",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "idle",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_startzeit",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "unknown",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_verbleibende_zeit",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "0",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_vrs_fertigstellung",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "unknown",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_aktuelle_schicht",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "0",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_gesamtzahl_der_schichten",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "0",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_name_der_aufgabe",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "unknown",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_gewicht_des_drucks",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "31.56",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_aktiver_slot",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "none",
+    "v": null
+  },
+  {
+    "a": {},
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_seriennummer",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "01P09A431900844",
+    "v": null
+  }
+]

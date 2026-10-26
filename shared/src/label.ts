@@ -188,6 +188,47 @@ export function manufacturerFromUrl(raw: string, extra: string[] = []): string |
   return known ?? alias?.[1] ?? name[0].toUpperCase() + name.slice(1);
 }
 
+/**
+ * Deutscher Farbname zu einem Farbwert (z.B. aus dem AMS), als Vorschlag. Nach Farbton,
+ * Sättigung und Helligkeit statt „nächste Tabellenfarbe“, sonst wird Gold (#e4bd68) zu Gelb.
+ */
+export function colorNameFromHex(hex: string | null | undefined): string | undefined {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex ?? '');
+  if (!m) return undefined;
+  const [r, g, b] = m.slice(1, 4).map((x) => parseInt(x, 16) / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  let h = 0;
+  if (d) {
+    if (max === r) h = 60 * (((g - b) / d) % 6);
+    else if (max === g) h = 60 * ((b - r) / d + 2);
+    else h = 60 * ((r - g) / d + 4);
+  }
+  if (h < 0) h += 360;
+
+  if (s < 0.15 || d < 0.08) {
+    if (l > 0.9) return 'Weiß';
+    if (l > 0.65) return 'Hellgrau';
+    if (l > 0.38) return 'Grau';
+    if (l > 0.16) return 'Dunkelgrau';
+    return 'Schwarz';
+  }
+  if (h >= 5 && h < 50 && l < 0.42) return 'Braun';
+  if (h >= 15 && h < 60 && l > 0.82) return 'Beige';
+  if (h < 15 || h >= 345) return l > 0.62 ? 'Pink' : 'Rot';
+  if (h < 35) return 'Orange';
+  if (h < 55) return s < 0.85 ? 'Gold' : 'Gelb';
+  if (h < 70) return 'Gelb';
+  if (h < 160) return l < 0.3 ? 'Dunkelgrün' : 'Grün';
+  if (h < 195) return 'Türkis';
+  if (h < 250) return l < 0.35 ? 'Dunkelblau' : l > 0.65 ? 'Hellblau' : 'Blau';
+  if (h < 290) return 'Lila';
+  return 'Pink';
+}
+
 export function parseSpoolLabel(raw: string, ctx: LabelContext): LabelGuess {
   const text = normalize(raw);
   const color = findColor(text);

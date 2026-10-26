@@ -1,0 +1,1 @@
+ALTER TABLE `printers` DROP COLUMN `ha_entity_prefix`;

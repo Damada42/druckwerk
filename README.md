@@ -47,12 +47,13 @@ wird es automatisch neu erstellt.
   Startbildschirm geht trotzdem.
 - HTTPS abschalten: `HTTPS=false` setzen.
 
-| Variable   | Standard      | Bedeutung                              |
-| ---------- | ------------- | -------------------------------------- |
-| `API_PORT` | `3000`        | Port des Servers                       |
-| `HOST`     | `0.0.0.0`     | Netzwerk-Interface                     |
-| `DATA_DIR` | `server/data` | Ablage für Datenbank und Rechnungen    |
-| `HTTPS`    | `true`        | `false` = nur HTTP (keine Live-Kamera) |
+| Variable     | Standard      | Bedeutung                              |
+| ------------ | ------------- | -------------------------------------- |
+| `API_PORT`   | `3000`        | Port des Servers                       |
+| `HOST`       | `0.0.0.0`     | Netzwerk-Interface                     |
+| `DATA_DIR`   | `server/data` | Ablage für Datenbank und Rechnungen    |
+| `HTTPS`      | `true`        | `false` = nur HTTP (keine Live-Kamera) |
+| `HA_POLL_MS` | `20000`       | Abfrage-Intervall Home Assistant (ms)  |
 
 **Backup:** Den Ordner `server/data` sichern (enthält `3dapp.db` und alle hochgeladenen Rechnungen).
 
@@ -100,6 +101,21 @@ Ab drei Artikeln steht dort „… + 2 weitere“; ohne erkennbare Artikeltabell
 Texterkennung. Von Hand eingetragene Werte bleiben unangetastet; der erkannte Text ist zum Prüfen
 aufklappbar.
 
-Noch offen:
+**Phase 4 (fertig):** Home-Assistant-Anbindung für Bambu-Lab-Drucker (Integration „Bambu Lab“ in HA):
 
-- **Phase 4:** Home-Assistant-Anbindung für Live-Status des Bambu Lab P1S (Fortschritt, Temperaturen, AMS-Slots)
+- **Einrichten:** Unter „Einstellungen → Home Assistant“ Adresse (z.B. `http://homeassistant.local:8123`)
+  und einen langlebigen Zugriffstoken eintragen (HA → Profil → Sicherheit → Langlebige Zugriffstoken).
+  Der Token bleibt auf dem Server, der Browser bekommt ihn nie zu sehen. Danach unter „Drucker →
+  Bearbeiten“ das gefundene HA-Gerät wählen.
+- **Live-Status** auf der Drucker-Seite und in der Übersicht: Status, Fortschritt, Schicht, Restzeit,
+  Endzeit, Temperaturen, Auftrag mit Vorschaubild.
+- **Steuerung:** Pause, Fortsetzen, Abbrechen (mit Rückfrage) und Druckraumbeleuchtung.
+- **AMS:** Die Slots zeigen Material, Farbe und Rest-% laut Drucker. Jedem Slot lässt sich eine Spule aus
+  dem Bestand zuordnen; im Filament-Bestand steht sie dann als „Im AMS, Slot n“. Ist die Spule noch nicht
+  im Bestand, legt „Übernehmen“ sie mit den AMS-Daten an (Hersteller, Typ, Farbe mit deutschem Farbnamen,
+  Restmenge aus Rest-%) und ordnet sie gleich zu – Farbname und Preis danach bei Bedarf anpassen.
+- **Automatisch abbuchen:** Der Server fragt HA alle 20 s ab (`HA_POLL_MS`), merkt sich, welcher Slot wie
+  lange gedruckt hat, und bucht nach dem Druck das Druckgewicht von den zugeordneten Spulen ab. Bei
+  mehreren Farben wird nach Druckzeit aufgeteilt, abgebrochene Drucke anteilig nach Fortschritt (beides als
+  „≈ geschätzt“ markiert). Jede Abbuchung lässt sich auf der Drucker-Seite rückgängig machen. Läuft der
+  Server während eines Drucks nicht, wird dieser Druck nicht gebucht.

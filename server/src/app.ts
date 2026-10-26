@@ -10,6 +10,9 @@ import { registerProjectRoutes } from './routes/projects.js';
 import { registerScanRoutes } from './routes/scan.js';
 import { registerClientLogRoutes } from './routes/clientLog.js';
 import { registerStatsRoutes } from './routes/stats.js';
+import { registerHaRoutes } from './routes/ha.js';
+import { createHaClient } from './ha/client.js';
+import { createWatcher } from './ha/watcher.js';
 
 export interface AppOptions {
   /** Pfad zur SQLite-Datei oder ':memory:' für Tests. */
@@ -22,6 +25,10 @@ export interface AppOptions {
   https?: { key: string; cert: string };
   /** Meldungen vom Browser zusätzlich als JSON-Zeilen in diese Datei schreiben */
   clientLogFile?: string;
+  /** Home Assistant alle n ms abfragen (Filament-Abbuchung); ohne Angabe nur auf Anfrage */
+  haPollMs?: number;
+  /** Ersatz für fetch, damit Tests ein falsches Home Assistant einhängen können */
+  haFetch?: typeof fetch;
 }
 
 export async function buildApp(options: AppOptions) {
@@ -46,6 +53,11 @@ export async function buildApp(options: AppOptions) {
     if (status >= 500) app.log.error(error);
     reply.code(status).send({ error: status >= 500 ? 'Interner Fehler' : error.message });
   });
+
+  const ha = createHaClient(db, options.haFetch);
+  const watcher = createWatcher(db, ha, app.log);
+  if (options.haPollMs) watcher.start(options.haPollMs);
+  app.addHook('onClose', async () => watcher.stop());
 
   await app.register(fastifyMultipart, { limits: { fileSize: 25 * 1024 * 1024 } });
   await app.register(fastifyStatic, {
@@ -103,6 +115,7 @@ export async function buildApp(options: AppOptions) {
       registerProjectRoutes(api, db, options.uploadDir);
       registerInvoiceRoutes(api, db, options.uploadDir);
       registerStatsRoutes(api, db);
+      registerHaRoutes(api, db, ha);
     },
     { prefix: '/api' },
   );
@@ -122,5 +135,5 @@ export async function buildApp(options: AppOptions) {
     });
   }
 
-  return { app, db };
+  return { app, db, ha, watcher };
 }

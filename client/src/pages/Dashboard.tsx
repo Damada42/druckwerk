@@ -3,6 +3,7 @@ import { ArrowRight, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useList, useStats } from '../api';
 import { NAV_ITEMS } from '../components/Layout';
+import { PrinterLiveSummary } from '../components/PrinterLive';
 import { Card, ColorDot, PageHeader, dateDe, grams } from '../components/ui';
 
 const STATUS_DOT: Record<ProjectStatus, string> = {
@@ -19,6 +20,7 @@ export function DashboardPage() {
 
   const active = projects.filter((p) => p.status === 'in_progress').slice(0, 5);
   const low = spools.filter((s) => s.weightRemainingG < LOW_FILAMENT_GRAMS).slice(0, 5);
+  const linked = printers.filter((p) => p.haDeviceId);
 
   const tileInfo: Record<string, string> = {
     '/projekte': stats ? `${stats.projects.open + stats.projects.in_progress} aktiv` : '',
@@ -129,11 +131,15 @@ export function DashboardPage() {
               ))}
             </ul>
           )}
-          {printers.length > 0 && (
-            <p className="mt-4 border-t border-line pt-3 text-xs text-muted">
-              Live-Status von {printers.map((p) => p.name).join(', ')} folgt mit der
-              Home-Assistant-Anbindung.
-            </p>
+          {linked.length > 0 && (
+            <div className="mt-4 border-t border-line pt-3">
+              <h2 className="mb-2 font-semibold">Drucker</h2>
+              <ul className="space-y-3">
+                {linked.map((p) => (
+                  <PrinterLiveSummary key={p.id} printer={p} />
+                ))}
+              </ul>
+            </div>
           )}
         </Card>
       </div>

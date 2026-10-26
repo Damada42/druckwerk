@@ -1,24 +1,27 @@
-import { calcPrinterHourly, type Printer, type PrinterHourlyCosts } from '@3dapp/shared';
-import { Box, Home, Plus } from 'lucide-react';
+import {
+  calcPrinterHourly,
+  type HaPrinterDevice,
+  type Printer,
+  type PrinterHourlyCosts,
+} from '@3dapp/shared';
+import { Box, Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { useList } from '../api';
+import { useHaStatus, useList } from '../api';
 import { EntityForm, type FieldDef } from '../components/EntityForm';
+import { PrinterLivePanel } from '../components/PrinterLive';
 import { Badge, Button, Card, Empty, PageHeader, cx, euro } from '../components/ui';
 
 const hasCostData = (p: Printer) =>
   [p.powerW, p.purchasePrice, p.maintenancePerYear].some((v) => v !== null);
 
-const FIELDS: FieldDef[] = [
+const BASE_FIELDS: FieldDef[] = [
   { key: 'name', label: 'Name', required: true, placeholder: 'z.B. P1S Werkstatt' },
   { key: 'model', label: 'Modell', required: true, placeholder: 'z.B. Bambu Lab P1S' },
   { key: 'nozzle', label: 'Düse (mm)', type: 'number', step: '0.1' },
   { key: 'hasAms', label: 'Mit AMS (automatisches Materialsystem)', type: 'checkbox' },
-  {
-    key: 'haEntityPrefix',
-    label: 'Home-Assistant-Gerät (Entity-Präfix)',
-    wide: true,
-    placeholder: 'z.B. p1s_01p00a123456789',
-  },
+];
+
+const COST_FIELDS: FieldDef[] = [
   { key: 'powerW', label: 'Stromverbrauch (Watt)', type: 'number' },
   { key: 'electricityPrice', label: 'Strompreis (€/kWh)', type: 'number', step: '0.01' },
   { key: 'purchasePrice', label: 'Druckerpreis (€)', type: 'number', step: '0.01' },
@@ -126,16 +129,39 @@ function CostComparison({ printers }: { printers: Printer[] }) {
   );
 }
 
+/** Auswahl des Home-Assistant-Geräts; ohne Verbindung nur ein Hinweis */
+function haField(devices: HaPrinterDevice[], current: string | null | undefined): FieldDef[] {
+  if (!devices.length && !current) return [];
+  const options = devices.map((d) => ({ value: d.id, label: `${d.name} (${d.model})` }));
+  if (current && !devices.some((d) => d.id === current))
+    options.push({ value: current, label: 'Bisheriges Gerät (gerade nicht gefunden)' });
+  return [
+    {
+      key: 'haDeviceId',
+      label: 'Home-Assistant-Gerät (Live-Status)',
+      type: 'select',
+      wide: true,
+      options,
+    },
+  ];
+}
+
 export function PrintersPage() {
   const { data: printers = [], isLoading } = useList('printers');
   const { data: projects = [] } = useList('projects');
+  const { data: ha } = useHaStatus();
   const [editing, setEditing] = useState<Printer | 'new' | null>(null);
+  const fields = [
+    ...BASE_FIELDS,
+    ...haField(ha?.printers ?? [], editing && editing !== 'new' ? editing.haDeviceId : null),
+    ...COST_FIELDS,
+  ];
 
   return (
     <>
       <PageHeader
         title="Drucker"
-        subtitle="Deine Drucker. Live-Daten kommen später über Home Assistant."
+        subtitle="Deine Drucker mit Kosten pro Druckstunde und – über Home Assistant – Live-Status."
         actions={
           <Button variant="primary" onClick={() => setEditing('new')}>
             <Plus size={16} /> Drucker
@@ -143,28 +169,35 @@ export function PrintersPage() {
         }
       />
       {!isLoading && printers.length === 0 && <Empty>Noch keine Drucker angelegt.</Empty>}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         {printers.map((p) => {
           const active = projects.filter(
             (pr) => pr.printerId === p.id && pr.status === 'in_progress',
           );
           return (
-            <Card
-              key={p.id}
-              className="cursor-pointer p-5 transition hover:border-accent/60"
-              onClick={() => setEditing(p)}
-            >
+            <Card key={p.id} className="p-5" role="region" aria-label={p.name}>
               <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-soft text-accent-strong dark:text-orange-300">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-strong dark:text-orange-300">
                     <Box size={22} />
                   </span>
-                  <div>
-                    <div className="font-semibold">{p.name}</div>
-                    <div className="text-xs text-muted">{p.model}</div>
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold">{p.name}</div>
+                    <div className="truncate text-xs text-muted">{p.model}</div>
                   </div>
                 </div>
-                {p.hasAms && <Badge>AMS</Badge>}
+                <div className="flex shrink-0 items-center gap-1">
+                  {p.hasAms && <Badge>AMS</Badge>}
+                  <Button
+                    variant="ghost"
+                    className="!p-1.5"
+                    aria-label={`${p.name} bearbeiten`}
+                    title="Bearbeiten"
+                    onClick={() => setEditing(p)}
+                  >
+                    <Pencil size={16} />
+                  </Button>
+                </div>
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
                 <dt className="text-muted">Düse</dt>
@@ -176,12 +209,7 @@ export function PrintersPage() {
                   {hasCostData(p) ? perHour(calcPrinterHourly(p).total) : '–'}
                 </dd>
               </dl>
-              <div className="mt-4 flex items-center gap-2 rounded-lg border border-dashed border-line px-3 py-2 text-xs text-muted">
-                <Home size={14} className="shrink-0" />
-                {p.haEntityPrefix
-                  ? `Verknüpft mit HA-Gerät „${p.haEntityPrefix}“ – Live-Status folgt.`
-                  : 'Status, Fortschritt & AMS-Slots folgen über Home Assistant.'}
-              </div>
+              <PrinterLivePanel printer={p} />
             </Card>
           );
         })}
@@ -191,7 +219,7 @@ export function PrintersPage() {
         <EntityForm
           resource="printers"
           title={editing === 'new' ? 'Neuer Drucker' : editing.name}
-          fields={FIELDS}
+          fields={fields}
           initial={editing === 'new' ? undefined : editing}
           defaults={{ nozzle: 0.4, hasAms: false, electricityPrice: 0.3, hoursPerYear: 500 }}
           onClose={() => setEditing(null)}
