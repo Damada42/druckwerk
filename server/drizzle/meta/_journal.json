@@ -15,6 +15,13 @@
       "when": 1792851676127,
       "tag": "0001_printer_costs",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792926413559,
+      "tag": "0002_barcode_products",
+      "breakpoints": true
     }
   ]
 }

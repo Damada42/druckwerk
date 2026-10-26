@@ -31,7 +31,7 @@ describe('Stammdaten', () => {
     expect(printers[0]).toMatchObject({ model: 'Bambu Lab P1S', hasAms: true });
   });
 
-  it('schützt verwendete Einträge mit verständlicher Meldung', async () => {
+  it('schÃ¼tzt verwendete EintrÃ¤ge mit verstÃ¤ndlicher Meldung', async () => {
     await post('/api/spools', { typeId: 1, manufacturer: 'Sunlu', colorName: 'Grau' });
     const res = await app.inject({ method: 'DELETE', url: '/api/filament-types/1' });
     expect(res.statusCode).toBe(409);
@@ -46,9 +46,84 @@ describe('Stammdaten', () => {
   });
 });
 
+describe('Barcode-Scan', () => {
+  const spool = {
+    typeId: 1,
+    manufacturer: 'Bambu Lab',
+    colorName: 'Jade WeiÃŸ',
+    colorHex: '#f0f0ea',
+    finishId: 2,
+    weightTotalG: 1000,
+    price: 19.99,
+    barcode: ' 6975337 031234 ',
+  };
+
+  it('unbekannter Barcode liefert leeres Ergebnis', async () => {
+    const res = (await app.inject('/api/barcodes/4000000000000')).json();
+    expect(res).toEqual({ product: null, spoolCount: 0, remainingG: 0 });
+  });
+
+  it('legt mehrere Spulen an, merkt die Sorte und findet sie wieder', async () => {
+    const created = await post<{ id: number; barcode: string; weightRemainingG: number }[]>(
+      '/api/spools/batch',
+      { spool, count: 3, rememberBarcode: true },
+    );
+    expect(created.status).toBe(201);
+    expect(created.body).toHaveLength(3);
+    expect(created.body[0]).toMatchObject({ barcode: '6975337031234', weightRemainingG: 1000 });
+
+    const lookup = (await app.inject('/api/barcodes/6975337031234')).json();
+    expect(lookup.product).toMatchObject({
+      manufacturer: 'Bambu Lab',
+      colorName: 'Jade WeiÃŸ',
+      price: 19.99,
+    });
+    expect(lookup).toMatchObject({ spoolCount: 3, remainingG: 3000 });
+
+    // Erneuter Scan mit neuem Preis aktualisiert die gemerkte Sorte
+    await post('/api/spools/batch', {
+      spool: { ...spool, price: 17.5 },
+      count: 1,
+      rememberBarcode: true,
+    });
+    const again = (await app.inject('/api/barcodes/6975337031234')).json();
+    expect(again.product.price).toBe(17.5);
+    expect(again.spoolCount).toBe(4);
+    expect((await app.inject('/api/products')).json()).toHaveLength(1);
+  });
+
+  it('nimmt Meldungen vom Browser entgegen', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/client-log',
+      payload: { event: 'scan-photo', data: { size: 123 } },
+    });
+    expect(res.statusCode).toBe(204);
+    const tooBig = await app.inject({
+      method: 'POST',
+      url: '/api/client-log',
+      payload: { event: 'x', data: 'a'.repeat(70_000) },
+    });
+    expect(tooBig.statusCode).toBe(413);
+  });
+
+  it('prÃ¼ft Anzahl und Pflichtfelder', async () => {
+    expect((await post('/api/spools/batch', { spool, count: 0 })).status).toBe(400);
+    expect((await post('/api/spools/batch', { spool, count: 51 })).status).toBe(400);
+    expect((await post('/api/spools/batch', { spool: { typeId: 1 }, count: 1 })).status).toBe(400);
+  });
+
+  it('merkt sich die Sorte nur auf Wunsch', async () => {
+    await post('/api/spools/batch', { spool, count: 1 });
+    const lookup = (await app.inject('/api/barcodes/6975337031234')).json();
+    expect(lookup.product).toBeNull();
+    expect(lookup.spoolCount).toBe(1);
+  });
+});
+
 describe('Druckerkosten', () => {
   // Referenzwerte aus Markus' Kostenvergleich (Excel). Halot: Excel rundet die Abnutzung auf
-  // 0,07 €/h (→ 0,274); exakt sind 200 € / 3000 h = 0,0667 €/h (→ 0,2707).
+  // 0,07 â‚¬/h (â†’ 0,274); exakt sind 200 â‚¬ / 3000 h = 0,0667 â‚¬/h (â†’ 0,2707).
   const cases = [
     { name: 'Bambu P1S', w: 160, kwh: 0.2, price: 1600, life: 2000, maint: 300, total: 1.432 },
     { name: 'Elwms', w: 180, kwh: 0.3, price: 3500, life: 5000, maint: 300, total: 1.354 },
@@ -63,7 +138,7 @@ describe('Druckerkosten', () => {
     },
     { name: 'Flashforge SLA', w: 90, kwh: 0.3, price: 300, life: 3000, maint: 100, total: 0.327 },
   ];
-  it.each(cases)('$name kostet $total €/h', (c) => {
+  it.each(cases)('$name kostet $total â‚¬/h', (c) => {
     const h = calcPrinterHourly({
       powerW: c.w,
       electricityPrice: c.kwh,
@@ -75,7 +150,7 @@ describe('Druckerkosten', () => {
     expect(h.total).toBeCloseTo(c.total, 6);
   });
 
-  it('rechnet Druckzeit × Stundensatz ins Projekt ein', async () => {
+  it('rechnet Druckzeit Ã— Stundensatz ins Projekt ein', async () => {
     const project = await post<ProjectWithDetails>('/api/projects', {
       title: 'Vase',
       printerId: 1,
@@ -141,7 +216,7 @@ describe('Projekte', () => {
     const spool = await post<{ id: number }>('/api/spools', {
       typeId: 1,
       manufacturer: 'Sunlu',
-      colorName: 'Weiß',
+      colorName: 'WeiÃŸ',
       weightTotalG: 1000,
       weightRemainingG: 150,
     });

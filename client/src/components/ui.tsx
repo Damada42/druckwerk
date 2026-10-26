@@ -46,14 +46,20 @@ export function Field({
   label,
   children,
   className,
+  badge,
 }: {
   label: string;
   children: ReactNode;
   className?: string;
+  /** Kleiner Hinweis neben dem Label, z.B. „erkannt“ */
+  badge?: ReactNode;
 }) {
   return (
     <label className={cx('flex flex-col gap-1.5', className)}>
-      <span className="text-xs font-medium text-muted">{label}</span>
+      <span className="flex items-center gap-1.5 text-xs font-medium text-muted">
+        {label}
+        {badge}
+      </span>
       {children}
     </label>
   );

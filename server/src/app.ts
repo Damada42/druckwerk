@@ -1,12 +1,14 @@
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import { eq } from 'drizzle-orm';
-import Fastify, { type FastifyError } from 'fastify';
+import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import { existsSync, mkdirSync } from 'node:fs';
 import { createDb, schema } from './db/index.js';
 import { parseId, registerCrud } from './routes/crud.js';
 import { registerInvoiceRoutes } from './routes/invoices.js';
 import { registerProjectRoutes } from './routes/projects.js';
+import { registerScanRoutes } from './routes/scan.js';
+import { registerClientLogRoutes } from './routes/clientLog.js';
 import { registerStatsRoutes } from './routes/stats.js';
 
 export interface AppOptions {
@@ -16,12 +18,20 @@ export interface AppOptions {
   /** Gebauter Client, der unter / ausgeliefert wird (nur Produktivbetrieb). */
   clientDir?: string;
   logger?: boolean;
+  /** Schlüssel + Zertifikat für HTTPS (sonst HTTP) */
+  https?: { key: string; cert: string };
+  /** Meldungen vom Browser zusätzlich als JSON-Zeilen in diese Datei schreiben */
+  clientLogFile?: string;
 }
 
 export async function buildApp(options: AppOptions) {
   mkdirSync(options.uploadDir, { recursive: true });
   const db = createDb(options.dbFile);
-  const app = Fastify({ logger: options.logger ?? false });
+  const logger = options.logger ?? false;
+  // Fastify typisiert HTTPS-Instanzen anders; die Routen sind davon unabhängig
+  const app = (
+    options.https ? Fastify({ logger, https: options.https }) : Fastify({ logger })
+  ) as FastifyInstance;
 
   // Muss vor den Routen-Plugins stehen, sonst erben diese den Standard-Handler
   app.setErrorHandler<FastifyError>((error, _req, reply) => {
@@ -85,6 +95,11 @@ export async function buildApp(options: AppOptions) {
         },
       );
 
+      registerCrud(api, db, '/products', schema.filamentProducts, {
+        required: ['barcode', 'typeId', 'manufacturer', 'colorName'],
+      });
+      registerScanRoutes(api, db);
+      registerClientLogRoutes(api, options.clientLogFile);
       registerProjectRoutes(api, db, options.uploadDir);
       registerInvoiceRoutes(api, db, options.uploadDir);
       registerStatsRoutes(api, db);

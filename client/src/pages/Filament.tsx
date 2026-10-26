@@ -3,6 +3,8 @@ import { ChevronDown, Copy, Minus, Pencil, Plus, ScanLine } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useConsume, useList, useSave } from '../api';
 import { EntityForm, type FieldDef } from '../components/EntityForm';
+import { ScanDialog, type ScanResult } from './ScanDialog';
+import { ScanSpoolForm } from './ScanSpoolForm';
 import {
   Badge,
   Button,
@@ -37,6 +39,7 @@ export function FilamentPage() {
   const [editing, setEditing] = useState<FilamentSpool | 'new' | null>(null);
   const [consuming, setConsuming] = useState<FilamentSpool | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [scan, setScan] = useState<'dialog' | ScanResult | null>(null);
   const { save } = useSave('spools');
 
   const finishName = (id: number | null) => finishes.find((f) => f.id === id)?.name ?? 'Normal';
@@ -115,7 +118,7 @@ export function FilamentPage() {
         subtitle={`${spools.length} Spulen · ${grams(totalAll)} auf Lager`}
         actions={
           <>
-            <Button disabled title="Kommt in Phase 2: Barcode/QR scannen">
+            <Button onClick={() => setScan('dialog')}>
               <ScanLine size={16} /> Scannen
             </Button>
             <Button variant="primary" onClick={() => setEditing('new')}>
@@ -234,6 +237,16 @@ export function FilamentPage() {
         />
       )}
       {consuming && <ConsumeDialog spool={consuming} onClose={() => setConsuming(null)} />}
+      {scan === 'dialog' && <ScanDialog onResult={setScan} onClose={() => setScan(null)} />}
+      {scan && scan !== 'dialog' && (
+        <ScanSpoolForm
+          // Neuer Scan → neues Formular
+          key={`${scan.barcode}|${scan.text}`}
+          result={scan}
+          onClose={() => setScan(null)}
+          onRescan={() => setScan('dialog')}
+        />
+      )}
       <ErrorText error={save.error} />
     </>
   );

@@ -53,7 +53,25 @@ export const filamentSpools = sqliteTable('filament_spools', {
   purchaseDate: text('purchase_date'),
   location: text('location'),
   haTrayEntity: text('ha_tray_entity'),
+  barcode: text('barcode'),
   notes: text('notes'),
+  createdAt: createdAt(),
+});
+
+/** Gemerkte Sorte pro Barcode; die Spulen selbst bleiben in filament_spools. */
+export const filamentProducts = sqliteTable('filament_products', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  barcode: text('barcode').notNull().unique(),
+  typeId: integer('type_id')
+    .notNull()
+    .references(() => filamentTypes.id),
+  manufacturer: text('manufacturer').notNull(),
+  colorName: text('color_name').notNull(),
+  colorHex: text('color_hex').notNull().default('#cccccc'),
+  finishId: integer('finish_id').references(() => finishes.id, { onDelete: 'set null' }),
+  diameter: real('diameter').notNull().default(1.75),
+  weightTotalG: real('weight_total_g').notNull().default(1000),
+  price: real('price'),
   createdAt: createdAt(),
 });
 

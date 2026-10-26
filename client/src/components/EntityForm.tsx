@@ -142,6 +142,7 @@ export function EntityForm<R extends ResourceName>({
                     className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-line bg-surface-2 p-1"
                   />
                   <TextInput
+                    aria-label={`${f.label} (Hex-Wert)`}
                     value={(value as string) ?? ''}
                     onChange={(e) => set(e.target.value)}
                   />

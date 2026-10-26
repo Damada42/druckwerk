@@ -17,7 +17,7 @@ npm install
 npm run dev
 ```
 
-Dann im Browser `http://localhost:5173` öffnen – vom Handy aus `http://<IP-des-PCs>:5173`.
+Dann im Browser `https://localhost:5173` öffnen – vom Handy aus `https://<IP-des-PCs>:5173`.
 
 **Dauerbetrieb** (eine Adresse für alles, Port 3000):
 
@@ -29,14 +29,30 @@ npm run build
 npm start
 ```
 
-Danach ist die App unter `http://<IP-des-PCs>:3000` erreichbar und lässt sich auf dem Handy über
-„Zum Startbildschirm hinzufügen“ wie eine App installieren.
+Danach ist die App unter `https://<IP-des-PCs>:3000` erreichbar.
 
-| Variable   | Standard      | Bedeutung                           |
-| ---------- | ------------- | ----------------------------------- |
-| `API_PORT` | `3000`        | Port des Servers                    |
-| `HOST`     | `0.0.0.0`     | Netzwerk-Interface                  |
-| `DATA_DIR` | `server/data` | Ablage für Datenbank und Rechnungen |
+### HTTPS im Heimnetz
+
+Die App läuft über **HTTPS**, weil Handy-Browser die Live-Kamera (Barcode-Scanner) nur über eine
+sichere Verbindung freigeben. Beim ersten Start erzeugt sie ein eigenes Zertifikat für `localhost`, den
+Rechnernamen und die Netzwerk-IP (`server/data/certs/tls.json`, gültig 825 Tage). Ändert sich die IP,
+wird es automatisch neu erstellt.
+
+- Beim **ersten Aufruf** zeigt jeder Browser eine Warnung („Verbindung ist nicht privat“), weil das
+  Zertifikat nicht von einer offiziellen Stelle stammt. Einmal mit **„Erweitert → Trotzdem fortfahren“**
+  bestätigen.
+- Die Adresse muss mit **`https://`** beginnen; `http://` antwortet nicht mehr.
+- Mit selbst erstelltem Zertifikat lässt sich die App nicht als PWA installieren (Browser verlangen
+  dafür ein offizielles Zertifikat). Im Browser funktioniert alles normal; ein Lesezeichen auf dem
+  Startbildschirm geht trotzdem.
+- HTTPS abschalten: `HTTPS=false` setzen.
+
+| Variable   | Standard      | Bedeutung                              |
+| ---------- | ------------- | -------------------------------------- |
+| `API_PORT` | `3000`        | Port des Servers                       |
+| `HOST`     | `0.0.0.0`     | Netzwerk-Interface                     |
+| `DATA_DIR` | `server/data` | Ablage für Datenbank und Rechnungen    |
+| `HTTPS`    | `true`        | `false` = nur HTTP (keine Live-Kamera) |
 
 **Backup:** Den Ordner `server/data` sichern (enthält `3dapp.db` und alle hochgeladenen Rechnungen).
 
@@ -63,6 +79,21 @@ Typ → Farbe/Finish/Hersteller → Spule, Drucker mit Kosten pro Druckstunde (S
 Wartung) und Kostenvergleich, Einstellungen. Projekte rechnen Druckzeit × Stundensatz als
 Maschinenkosten ein.
 
-- **Phase 2:** Filament per Handy-Kamera scannen (Barcode/QR, Bambu-RFID über AMS)
+**Phase 2 (fertig):** Filament scannen unter „Filament → Scannen“:
+
+- **Barcode** (EAN/UPC/QR) live mit der Kamera, als Foto oder eingetippt. Beim ersten Scan füllst du die
+  Sorte aus, danach ist sie vorausgefüllt; mehrere gleiche Spulen auf einmal anlegen.
+- **Etikett-Foto:** Texterkennung (Tesseract, Deutsch + Englisch) schlägt Typ, Hersteller, Farbe, Finish,
+  Gewicht und Durchmesser vor. Die Sprachdaten (~10 MB) lädt der Browser beim ersten Mal aus dem
+  Internet und speichert sie danach.
+- Über HTTPS öffnet „Barcode / QR-Code scannen“ den **Live-Scanner** im Kamerabild. Manche Handys
+  erlauben dem Browser keinen Autofokus – dann bleibt das Live-Bild unscharf. Die App erkennt das,
+  merkt es sich und nimmt ab dann direkt ein **Foto über die Kamera-App** (mit Autofokus).
+- Sind Strichcode und QR-Code auf dem Foto, gewinnt der Strichcode. QR-Codes, die nur auf die
+  Hersteller-Webseite führen, liefern den Hersteller, merken sich aber keine Sorte (wären bei allen
+  Farben gleich).
+
+Noch offen:
+
 - **Phase 3:** Rechnungen per OCR auslesen (Betrag, Datum vorschlagen)
 - **Phase 4:** Home-Assistant-Anbindung für Live-Status des Bambu Lab P1S (Fortschritt, Temperaturen, AMS-Slots)

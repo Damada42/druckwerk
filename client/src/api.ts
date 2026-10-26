@@ -1,4 +1,6 @@
 import type {
+  BarcodeLookup,
+  SpoolBatchInput,
   Customer,
   DashboardStats,
   FilamentSpool,
@@ -126,6 +128,27 @@ export function useInvoices(projectId: number) {
     onSuccess: invalidate,
   });
   return { add, remove };
+}
+
+export function useBarcodeLookup(code: string | null) {
+  return useQuery({
+    queryKey: ['barcode', code],
+    queryFn: () => api.get<BarcodeLookup>(`/barcodes/${encodeURIComponent(code!)}`),
+    enabled: !!code,
+    staleTime: 0,
+  });
+}
+
+export function useSpoolBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SpoolBatchInput) => api.post<FilamentSpool[]>('/spools/batch', input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['spools'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+      qc.invalidateQueries({ queryKey: ['barcode'] });
+    },
+  });
 }
 
 export function useConsume() {

@@ -75,6 +75,39 @@ export interface Person {
   createdAt: string;
 }
 
+/** Gemerkte Sorte zu einem Barcode – füllt beim nächsten Scan alles vor. */
+export interface FilamentProduct {
+  id: number;
+  barcode: string;
+  typeId: number;
+  manufacturer: string;
+  colorName: string;
+  colorHex: string;
+  finishId: number | null;
+  diameter: number;
+  weightTotalG: number;
+  price: number | null;
+  createdAt: string;
+}
+
+/** Antwort beim Barcode-Nachschlagen */
+export interface BarcodeLookup {
+  product: FilamentProduct | null;
+  /** Wie viele Spulen dieser Sorte schon im Bestand sind */
+  spoolCount: number;
+  remainingG: number;
+}
+
+/** Mehrere gleiche Spulen auf einmal anlegen (z.B. nach Scan) */
+export interface SpoolBatchInput {
+  spool: Omit<FilamentSpool, 'id' | 'createdAt' | 'weightRemainingG'> & {
+    weightRemainingG?: number;
+  };
+  count: number;
+  /** Barcode als Sorte merken bzw. aktualisieren */
+  rememberBarcode?: boolean;
+}
+
 export interface FilamentType {
   id: number;
   name: string;
@@ -100,6 +133,8 @@ export interface FilamentSpool {
   purchaseDate: string | null;
   location: string | null;
   haTrayEntity: string | null;
+  /** Barcode (EAN) der Sorte, falls per Scan angelegt */
+  barcode: string | null;
   notes: string | null;
   createdAt: string;
 }
@@ -249,3 +284,5 @@ export function calcProjectCosts(
     printer && project.printHours ? calcPrinterHourly(printer).total * project.printHours : 0;
   return { filament, machine, extras, total: filament + machine + extras };
 }
+
+export * from './label';
