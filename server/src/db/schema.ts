@@ -156,6 +156,30 @@ export const haConnections = sqliteTable('ha_connections', {
   createdAt: createdAt(),
 });
 
+/**
+ * Kameras eines Druckers: eine Kamera-Entity aus Home Assistant oder eine direkte Stream-Adresse
+ * (z.B. Crowsnest bei Klipper). Der Browser sieht die Bilder nur über den Server.
+ */
+export const printerCameras = sqliteTable('printer_cameras', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  printerId: integer('printer_id')
+    .notNull()
+    .references(() => printers.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  /** Quelle Home Assistant: Verbindung + camera.*-Entity */
+  haConnectionId: integer('ha_connection_id').references(() => haConnections.id, {
+    onDelete: 'cascade',
+  }),
+  entityId: text('entity_id'),
+  /** Quelle direkt: MJPEG-Stream und optional Standbild */
+  streamUrl: text('stream_url'),
+  snapshotUrl: text('snapshot_url'),
+  /** Drehung des Bildes in Grad (0, 90, 180, 270) */
+  rotation: integer('rotation').notNull().default(0),
+  position: integer('position').notNull().default(0),
+  createdAt: createdAt(),
+});
+
 /** Einfache Schlüssel-Wert-Einstellungen */
 export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),

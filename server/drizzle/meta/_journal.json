@@ -43,6 +43,13 @@
       "when": 1793029926078,
       "tag": "0005_ha_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793119963540,
+      "tag": "0006_printer_cameras",
+      "breakpoints": true
     }
   ]
 }

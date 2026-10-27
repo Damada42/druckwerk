@@ -11,6 +11,7 @@ import { registerScanRoutes } from './routes/scan.js';
 import { registerClientLogRoutes } from './routes/clientLog.js';
 import { registerStatsRoutes } from './routes/stats.js';
 import { registerHaRoutes } from './routes/ha.js';
+import { registerCameraRoutes } from './routes/cameras.js';
 import { createHaClient } from './ha/client.js';
 import { createWatcher } from './ha/watcher.js';
 
@@ -27,7 +28,7 @@ export interface AppOptions {
   clientLogFile?: string;
   /** Home Assistant alle n ms abfragen (Filament-Abbuchung); ohne Angabe nur auf Anfrage */
   haPollMs?: number;
-  /** Ersatz für fetch, damit Tests ein falsches Home Assistant einhängen können */
+  /** Ersatz für fetch, damit Tests ein falsches Home Assistant (und Kameras) einhängen können */
   haFetch?: typeof fetch;
   /** Hinter einem Reverse-Proxy (Cloudflare/Authentik): X-Forwarded-*-Header übernehmen */
   trustProxy?: boolean;
@@ -125,6 +126,7 @@ export async function buildApp(options: AppOptions) {
       registerInvoiceRoutes(api, db, options.uploadDir);
       registerStatsRoutes(api, db);
       registerHaRoutes(api, db, ha);
+      registerCameraRoutes(api, db, ha, options.haFetch);
     },
     { prefix: '/api' },
   );

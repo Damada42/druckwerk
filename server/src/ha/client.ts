@@ -1,4 +1,10 @@
-import { findPrinterDevices, maskUrl, type HaEntity, type HaStatus } from '@3dapp/shared';
+import {
+  findPrinterDevices,
+  maskUrl,
+  type HaCameraList,
+  type HaEntity,
+  type HaStatus,
+} from '@3dapp/shared';
 import { eq } from 'drizzle-orm';
 import type { Db } from '../db/index.js';
 import { schema } from '../db/index.js';
@@ -19,6 +25,17 @@ export const BAMBU_TEMPLATE = `{%- set keys = ['slot','active','empty','color','
 {%- set ns.out = ns.out + [{'e': e, 's': s.state if s else none, 'a': a.v, 'd': d, 'v': device_attr(d, 'via_device_id') if d else none, 'n': (device_attr(d, 'name_by_user') or device_attr(d, 'name')) if d else none, 'm': device_attr(d, 'model') if d else none}] -%}
 {%- endfor -%}
 {{ ns.out | tojson }}`;
+
+/** Alle Kameras mit Gerät – auch von anderen Integrationen (Moonraker, generische Kamera …) */
+export const CAMERA_TEMPLATE = `{%- set ns = namespace(out=[]) -%}
+{%- for s in states.camera -%}
+{%- set d = device_id(s.entity_id) -%}
+{%- set ns.out = ns.out + [{'e': s.entity_id, 's': s.state, 'n': s.name, 'd': d, 'dn': (device_attr(d, 'name_by_user') or device_attr(d, 'name')) if d else none}] -%}
+{%- endfor -%}
+{{ ns.out | tojson }}`;
+
+/** camera.* – mehr lässt der Server nicht an Home Assistant durch */
+export const CAMERA_ENTITY = /^camera\.[a-z0-9_]+$/;
 
 interface RawEntity {
   e: string;
@@ -80,25 +97,33 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch) {
     return row;
   };
 
-  // Fehlermeldungen nennen den Standort, nie die Adresse: sie landen im Browser
-  async function request(target: Target, path: string, init: RequestInit = {}) {
+  /**
+   * Fehlermeldungen nennen den Standort, nie die Adresse: sie landen im Browser.
+   * Mit stream läuft die Antwort weiter, bis stream abbricht (siehe fetchWithTimeout).
+   */
+  async function request(
+    target: Target,
+    path: string,
+    init: RequestInit = {},
+    stream?: AbortSignal,
+  ) {
     let res: Response;
     try {
-      res = await fetchImpl(`${target.url}${path}`, {
-        ...init,
-        headers: {
-          authorization: `Bearer ${target.token}`,
-          ...(init.body ? { 'content-type': 'application/json' } : {}),
-          ...init.headers,
+      res = await fetchWithTimeout(
+        fetchImpl,
+        `${target.url}${path}`,
+        {
+          ...init,
+          headers: {
+            authorization: `Bearer ${target.token}`,
+            ...(init.body ? { 'content-type': 'application/json' } : {}),
+            ...init.headers,
+          },
         },
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
+        stream,
+      );
     } catch (e) {
-      const reason =
-        e instanceof Error && e.name === 'TimeoutError'
-          ? 'antwortet nicht'
-          : 'ist nicht erreichbar';
-      throw new HaError(`Home Assistant „${target.name}“ ${reason}.`);
+      throw new HaError(`Home Assistant „${target.name}“ ${unreachable(e)}.`);
     }
     if (res.status === 401 || res.status === 403)
       throw new HaError(
@@ -255,6 +280,55 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch) {
       cache.delete(conn.id);
     },
 
+    /** Kamera-Entities aller Standorte; nicht erreichbare Standorte stehen in errors */
+    async cameras(): Promise<HaCameraList> {
+      const all = connections();
+      const results = await Promise.allSettled(
+        all.map(async (conn) => {
+          const res = await request(conn, '/api/template', {
+            method: 'POST',
+            body: JSON.stringify({ template: CAMERA_TEMPLATE }),
+          });
+          const raw = JSON.parse(await res.text()) as {
+            e: string;
+            s: string | null;
+            n: string | null;
+            d: string | null;
+            dn: string | null;
+          }[];
+          return raw.map((r) => ({
+            connectionId: conn.id,
+            location: conn.name,
+            entityId: r.e,
+            name: r.n ?? r.e,
+            deviceId: r.d,
+            deviceName: r.dn,
+            available: r.s !== null && r.s !== 'unavailable',
+          }));
+        }),
+      );
+      return {
+        cameras: results.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])),
+        errors: results.flatMap((r) =>
+          r.status === 'rejected'
+            ? [r.reason instanceof Error ? r.reason.message : String(r.reason)]
+            : [],
+        ),
+      };
+    },
+
+    /** Standbild oder MJPEG-Stream einer Kamera-Entity; der Stream läuft, bis signal abbricht */
+    camera(
+      connectionId: number,
+      entityId: string,
+      kind: 'snapshot' | 'stream',
+      signal?: AbortSignal,
+    ) {
+      if (!CAMERA_ENTITY.test(entityId)) throw new HaError('Ungültige Kamera', 400);
+      const path = kind === 'stream' ? 'camera_proxy_stream' : 'camera_proxy';
+      return request(byId(connectionId), `/api/${path}/${entityId}`, {}, signal);
+    },
+
     /** Bild aus Home Assistant (z.B. Vorschaubild des Auftrags) über den Server durchreichen */
     async image(deviceId: string, path: string) {
       if (!path.startsWith('/api/')) throw new HaError('Ungültiger Bildpfad', 400);
@@ -268,6 +342,33 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch) {
 }
 
 export type HaClient = ReturnType<typeof createHaClient>;
+
+/** Grund für die Fehlermeldung, wenn fetch scheitert */
+export const unreachable = (e: unknown) =>
+  e instanceof Error && e.name === 'TimeoutError' ? 'antwortet nicht' : 'ist nicht erreichbar';
+
+/**
+ * fetch mit Zeitgrenze. Ohne stream gilt sie für die ganze Anfrage. Mit stream (Kamerabild) gilt
+ * sie nur, bis die Antwort-Header da sind – danach bricht nur noch stream die Übertragung ab.
+ */
+export async function fetchWithTimeout(
+  fetchImpl: typeof fetch,
+  url: string,
+  init: RequestInit,
+  stream?: AbortSignal,
+) {
+  if (!stream) return fetchImpl(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const timeout = new AbortController();
+  const timer = setTimeout(
+    () => timeout.abort(new DOMException('Zeitüberschreitung', 'TimeoutError')),
+    TIMEOUT_MS,
+  );
+  try {
+    return await fetchImpl(url, { ...init, signal: AbortSignal.any([stream, timeout.signal]) });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** Spule, die gerade in diesem AMS-Slot steckt */
 export function spoolInSlot(db: Db, entityId: string) {

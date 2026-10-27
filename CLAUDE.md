@@ -18,11 +18,12 @@ Requires Node 22+. On this Windows machine, PowerShell calls may need the PATH r
   - Stop the prod server.
   - Copy `server/data/3dapp.db` together with its `-wal` and `-shm` files into `server/data/backup/` (git-ignored). WAL mode keeps most of the data in the `-wal` file.
 
-Env vars: `API_PORT` (default 3000; deliberately not `PORT`, which the preview tooling sets), `HOST`, `DATA_DIR` (default `server/data`: DB, uploads, certs, `client-log.jsonl`), `HTTPS=false` to disable TLS, `HA_POLL_MS` (default 20000; the e2e server uses 500).
+Env vars: `API_PORT` (default 3000; deliberately not `PORT`, which the preview tooling sets), `HOST`, `DATA_DIR` (default `server/data`: DB, uploads, certs, `client-log.jsonl`), `HTTPS=false` to disable TLS, `HA_POLL_MS` (default 20000; the e2e server uses 500), `TRUST_PROXY=true` behind a reverse proxy. `NODE_ENV=production` (set by `npm start`) makes the server serve `client/dist`.
 
 ## Deployment
 
-- In production the app runs as a Docker container on the user's home server (Portainer). The image is built by `.github/workflows/docker.yml` (tests first, then `ghcr.io/<owner>/druckwerk`).
+- In production the app runs as a Docker container on the user's home server (Portainer, stack in `docker-compose.yml`, host port 3100). Every push to `main` triggers `.github/workflows/docker.yml`: it runs only `typecheck` and `npm test`, then publishes `ghcr.io/<owner>/druckwerk:latest`. CI doesn't run the e2e suite, so run `npm run e2e` locally before pushing.
+- The Dockerfile's runtime stage copies only `shared/src`, `server/src`, `server/drizzle` and the built `client/dist`. A new runtime file outside those (e.g. a server-side fixture or asset) needs its own `COPY` line.
 - It sits behind Cloudflare Tunnel → Authentik proxy outpost (login with MFA). The container serves plain HTTP (`HTTPS=false`, `TRUST_PROXY=true`, data in `/data`).
 - The app has no auth of its own, so it must never be exposed without the proxy.
 - Proxy constraints:
@@ -68,6 +69,7 @@ Fastify 5 + better-sqlite3 + drizzle-orm.
   - `watcher.ts` runs the tracker every `haPollMs`. `bookPlan` deducts from the spool whose `haTrayEntity` equals the slot entity. `filament_bookings` has a unique index on (job key, spool), so a job is never booked twice. A booking can be undone with `DELETE /api/bookings/:id`.
   - `POST /api/ams-import` creates a spool from live AMS slot data and links it to the slot. The manufacturer, type and finish come from `parseSpoolLabel` on the slot name; the color name comes from `colorNameFromHex` in `label.ts`, which uses hue, saturation and lightness bands (tested against Bambu's palette).
   - `buildApp` returns `{ app, db, ha, watcher }`. Tests pass `haFetch` and call `watcher.tick(now)` manually.
+- Cameras (`routes/cameras.ts`, table `printer_cameras`): a printer has any number of cameras, each either an HA `camera.*` entity (with its `haConnectionId`, since entity IDs aren't unique across instances) or a direct MJPEG URL (Crowsnest/Klipper). `CAMERA_TEMPLATE` lists all `camera.*` entities, not only `bambu_lab` ones. The browser only ever loads `/api/cameras/:id/stream|snapshot`; the server pipes HA's `camera_proxy_stream`/`camera_proxy` or the direct URL. `fetchWithTimeout` with a `stream` signal applies the 8 s timeout only until headers arrive, and `reply.raw` `close` aborts the upstream fetch. Passwords in camera URLs are masked (`maskUrlPassword`) in every response; sending the masked URL back unchanged keeps the stored one. Credentials in a URL are sent as Basic auth, because Node's fetch rejects URLs with userinfo. Without a snapshot URL, `snapshotFromStream` derives `?action=snapshot` from Crowsnest stream URLs.
   - `server/test/fake-ha.ts` (`FakeHa`) emulates HA from a fixture of the user's real P1S data (`test/fixtures/bambu-p1s.json`). The e2e global setup runs it as an HTTP server on port 3299; `POST /test/print` and `GET /test/calls` steer and inspect it.
 
 ### client/
@@ -88,6 +90,7 @@ React 19, Vite 7, Tailwind v4 (tokens in `index.css`), React Router 7 and TanSta
   - `image.ts` decodes photos once and downscales them to limit memory on phones.
 - Live camera access needs HTTPS. The service worker fails to register under a self-signed cert; this is expected and silenced in `main.tsx`.
 - `clientLog(event, data)` (sendBeacon) is the way to get diagnostics from devices.
+- `PrinterCameras.tsx` streams only the selected camera (MJPEG in an `<img>`); the others show snapshots refreshed every 10 s. Streams stop when the page is hidden or the card scrolls out of view, because each open MJPEG stream holds one of the browser's six HTTP/1.1 connections to the server. If the stream fails, it falls back to snapshots every 3 s.
 
 ### e2e/
 
@@ -104,5 +107,7 @@ React 19, Vite 7, Tailwind v4 (tokens in `index.css`), React Router 7 and TanSta
 - The server is reached at `https://<PC-IP>:3000` on the LAN. The phone only sees client changes after the `npm run prod` server has been restarted (it rebuilds the client), followed by a page reload on the phone.
 - Roadmap:
   - Done: phases 1 (core + Kanban), 2 (filament scan), 3 (invoice reading) and 4 (Home Assistant for the Bambu Lab P1S). Phase 4 covers live status, control, speed, skipping objects, AMS linking and import, automatic filament deduction and several HA locations.
-  - Next is a Klipper printer (Artillery "SidewinderX1", via the `moonraker` integration in HA). Its HA entities couldn't be inspected yet because the printer was offline. Look at the real data first: Klipper skips objects via `EXCLUDE_OBJECT`, and the app's live status only understands `bambu_lab` so far.
+  - Done since: several cameras per printer (HA entities or direct MJPEG URLs).
+  - Next: package Druckwerk as a Home Assistant App (HA renamed add-ons to "Apps" in 2026.2). The user's HA runs as an HA OS VM on Proxmox (amd64). The plan is Ingress (so all client URLs must become relative to the ingress path), an automatic local connection via `SUPERVISOR_TOKEN`, extra HA instances still via URL + token, and the Docker/Authentik variant kept from the same image.
+  - After that, a Klipper printer (Artillery "SidewinderX1", via the `moonraker` integration in HA). Its HA entities couldn't be inspected yet because the printer was offline. Look at the real data first: Klipper skips objects via `EXCLUDE_OBJECT`, and the app's live status only understands `bambu_lab` so far.
 - The user's Home Assistant is reachable through the HA MCP tools in this environment. Use them (read-only) to look at real entity data, e.g. `ha_eval_template` with `BAMBU_TEMPLATE`. Never put the user's token anywhere; the user enters it in the app.

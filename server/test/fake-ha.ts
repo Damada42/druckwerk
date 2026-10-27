@@ -13,6 +13,40 @@ export interface RawEntity {
 
 export const FAKE_TOKEN = 'test-token';
 
+/** Kamera wie aus CAMERA_TEMPLATE */
+export interface RawCamera {
+  e: string;
+  s: string | null;
+  n: string | null;
+  d: string | null;
+  dn: string | null;
+}
+
+/** 1×1-PNG als Kamerabild */
+export const FAKE_FRAME = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+/** Zugangsdaten der nachgebauten Crowsnest-Webcam unter /webcam/ */
+export const FAKE_WEBCAM_AUTH = `Basic ${Buffer.from('cam:geheim').toString('base64')}`;
+
+/** Ein MJPEG-Stream mit zwei Bildern – endlich, damit Tests nicht hängen */
+function mjpeg(): { status: number; type: string; body: Buffer } {
+  const part = Buffer.concat([
+    Buffer.from(
+      `--frame\r\nContent-Type: image/png\r\nContent-Length: ${FAKE_FRAME.length}\r\n\r\n`,
+    ),
+    FAKE_FRAME,
+    Buffer.from('\r\n'),
+  ]);
+  return {
+    status: 200,
+    type: 'multipart/x-mixed-replace; boundary=frame',
+    body: Buffer.concat([part, part, Buffer.from('--frame--\r\n')]),
+  };
+}
+
 /**
  * Nachgebautes Home Assistant für Tests: beantwortet die Anfragen des Servers (Config, Template,
  * Dienste, Bilder) aus einer veränderbaren Liste von Entities und merkt sich Dienstaufrufe.
@@ -27,12 +61,28 @@ export class FakeHa {
    * @param printer Präfix der Drucker-Entities (im Fixture „the_one“)
    * @param ams Präfix der AMS-Entities
    */
+  /** Kameras: die des P1S aus dem Fixture und eine Klipper-Kamera wie beim SidewinderX1 */
+  cameras: RawCamera[];
+
   constructor(
     fixture: RawEntity[],
     readonly printer = 'the_one',
     readonly ams = 'p1s_01p09a431900844_ams_1',
   ) {
     this.entities = structuredClone(fixture);
+    this.cameras = [
+      ...this.entities
+        .filter((x) => x.e.startsWith('camera.'))
+        .map((x) => ({ e: x.e, s: x.s, n: `${x.n} Kamera`, d: x.d, dn: x.n })),
+      { e: 'camera.sidewinderx1', s: 'idle', n: 'Kamera', d: 'klipper-device', dn: 'SidewinderX1' },
+      {
+        e: 'camera.sidewinderx1_usb',
+        s: 'unavailable',
+        n: 'SidewinderX1 Usb',
+        d: 'klipper-device',
+        dn: 'SidewinderX1',
+      },
+    ];
   }
 
   /** Zustand und/oder Attribute einer Entity ändern */
@@ -99,8 +149,26 @@ export class FakeHa {
     path: string,
     auth: string | null,
     body: string,
+    query = new URLSearchParams(),
   ): { status: number; type?: string; body: string | Buffer } {
+    // Crowsnest/mjpg-streamer einer Klipper-Webcam, mit Basic-Auth
+    if (method === 'GET' && path === '/webcam/') {
+      if (auth !== FAKE_WEBCAM_AUTH) return { status: 401, body: 'Unauthorized' };
+      return query.get('action') === 'snapshot'
+        ? { status: 200, type: 'image/png', body: FAKE_FRAME }
+        : mjpeg();
+    }
     if (auth !== `Bearer ${FAKE_TOKEN}`) return { status: 401, body: '401: Unauthorized' };
+    if (method === 'POST' && path === '/api/template' && body.includes('states.camera'))
+      return { status: 200, type: 'text/plain', body: JSON.stringify(this.cameras) };
+    const camera = /^\/api\/(camera_proxy|camera_proxy_stream)\/(camera\.\w+)$/.exec(path);
+    if (method === 'GET' && camera) {
+      const found = this.cameras.find((c) => c.e === camera[2]);
+      if (!found || found.s === 'unavailable') return { status: 404, body: 'Not found' };
+      return camera[1] === 'camera_proxy'
+        ? { status: 200, type: 'image/png', body: FAKE_FRAME }
+        : mjpeg();
+    }
     if (method === 'GET' && path === '/api/config')
       return {
         status: 200,
@@ -128,14 +196,8 @@ export class FakeHa {
       }
       return { status: 200, type: 'application/json', body: '[]' };
     }
-    if (method === 'GET' && path.startsWith('/api/image_proxy/')) {
-      // 1×1-PNG
-      const png = Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-        'base64',
-      );
-      return { status: 200, type: 'image/png', body: png };
-    }
+    if (method === 'GET' && path.startsWith('/api/image_proxy/'))
+      return { status: 200, type: 'image/png', body: FAKE_FRAME };
     return { status: 404, body: 'Not found' };
   }
 
@@ -148,6 +210,7 @@ export class FakeHa {
       url.pathname,
       headers.get('authorization'),
       String(init?.body ?? ''),
+      url.searchParams,
     );
     const body = typeof res.body === 'string' ? res.body : new Uint8Array(res.body);
     return new Response(body, {
@@ -180,6 +243,7 @@ export class FakeHa {
           url.pathname,
           req.headers.authorization ?? null,
           body,
+          url.searchParams,
         );
         res.writeHead(out.status, out.type ? { 'content-type': out.type } : {}).end(out.body);
       });

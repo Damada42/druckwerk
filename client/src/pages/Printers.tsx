@@ -4,10 +4,11 @@ import {
   type Printer,
   type PrinterHourlyCosts,
 } from '@3dapp/shared';
-import { Box, Pencil, Plus } from 'lucide-react';
+import { Box, Pencil, Plus, Video } from 'lucide-react';
 import { useState } from 'react';
 import { useHaStatus, useList } from '../api';
 import { EntityForm, type FieldDef } from '../components/EntityForm';
+import { CameraDialog, PrinterCameras } from '../components/PrinterCameras';
 import { PrinterLivePanel } from '../components/PrinterLive';
 import { Badge, Button, Card, Empty, PageHeader, cx, euro } from '../components/ui';
 
@@ -156,6 +157,7 @@ export function PrintersPage() {
   const { data: projects = [] } = useList('projects');
   const { data: ha } = useHaStatus();
   const [editing, setEditing] = useState<Printer | 'new' | null>(null);
+  const [cameraPrinter, setCameraPrinter] = useState<Printer | null>(null);
   const fields = [
     ...BASE_FIELDS,
     ...haField(
@@ -199,6 +201,15 @@ export function PrintersPage() {
                   <Button
                     variant="ghost"
                     className="!p-1.5"
+                    aria-label={`${p.name} Kameras`}
+                    title="Kameras"
+                    onClick={() => setCameraPrinter(p)}
+                  >
+                    <Video size={16} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="!p-1.5"
                     aria-label={`${p.name} bearbeiten`}
                     title="Bearbeiten"
                     onClick={() => setEditing(p)}
@@ -217,12 +228,16 @@ export function PrintersPage() {
                   {hasCostData(p) ? perHour(calcPrinterHourly(p).total) : '–'}
                 </dd>
               </dl>
+              <PrinterCameras printer={p} />
               <PrinterLivePanel printer={p} />
             </Card>
           );
         })}
       </div>
       {printers.some(hasCostData) && <CostComparison printers={printers.filter(hasCostData)} />}
+      {cameraPrinter && (
+        <CameraDialog printer={cameraPrinter} onClose={() => setCameraPrinter(null)} />
+      )}
       {editing && (
         <EntityForm
           resource="printers"

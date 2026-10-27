@@ -218,3 +218,73 @@ test('Laufender Druck: Fortschritt, Pause, Licht – danach automatisch abgebuch
   await expect(p1s(page).getByText('Automatisch abgebucht')).toBeHidden();
   expect(await remaining()).toBe(1000);
 });
+
+test('Mehrere Kameras: aus Home Assistant und direkt per Stream-Adresse', async ({ page }) => {
+  await page.goto('/drucker');
+  const card = p1s(page);
+  await expect(
+    card.getByText('Bereit', { exact: true }).or(card.getByText('Fertig')),
+  ).toBeVisible();
+  await expect(card.getByRole('region', { name: 'Kameras' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'P1S Kameras' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Kamera hinzufügen' }).click();
+  let form = dialog.getByRole('form', { name: 'Neue Kamera' });
+  // Die Kamera des verknüpften Druckers steht oben, nicht verfügbare sind markiert
+  const select = form.getByRole('combobox', { name: 'Kamera', exact: true });
+  await expect(select.locator('option').nth(1)).toHaveText('the_one Kamera');
+  await expect(select.locator('option', { hasText: 'SidewinderX1 – Kamera' })).toHaveCount(1);
+  await expect(
+    select.locator('option', { hasText: 'SidewinderX1 Usb – nicht verfügbar' }),
+  ).toHaveCount(1);
+  await select.selectOption({ label: 'the_one Kamera' });
+  await expect(form.getByLabel('Name')).toHaveValue('the_one Kamera');
+  await form.getByLabel('Name').fill('Druckraum');
+  await form.getByRole('button', { name: 'Speichern' }).click();
+  await expect(dialog.getByRole('listitem', { name: 'Kamera Druckraum' })).toContainText(
+    'Home Assistant: the_one the_one Kamera',
+  );
+
+  // Crowsnest-Webcam mit Zugangsdaten, auf dem Kopf montiert
+  await dialog.getByRole('button', { name: 'Kamera hinzufügen' }).click();
+  form = dialog.getByRole('form', { name: 'Neue Kamera' });
+  await form.getByLabel('Quelle').selectOption('url');
+  await form
+    .getByRole('textbox', { name: 'Stream-Adresse', exact: true })
+    .fill(`http://cam:geheim@127.0.0.1:${FAKE_HA_PORT}/webcam/?action=stream`);
+  await form.getByLabel('Name').fill('Düse');
+  await form.getByLabel('Drehung').selectOption('180');
+  await form.getByRole('button', { name: 'Speichern' }).click();
+  const duese = dialog.getByRole('listitem', { name: 'Kamera Düse' });
+  await expect(duese).toContainText(`http://cam:•••@127.0.0.1:${FAKE_HA_PORT}/webcam/`);
+
+  // Düse nach oben: sie wird groß gezeigt
+  await dialog.getByRole('button', { name: 'Düse nach oben' }).click();
+  await expect(dialog.getByRole('listitem').first()).toContainText('Düse');
+  await dialog.getByRole('button', { name: 'Fertig' }).click();
+
+  const region = card.getByRole('region', { name: 'Kameras' });
+  const loaded = (name: string) =>
+    expect
+      .poll(() =>
+        region.getByRole('img', { name }).evaluate((img: HTMLImageElement) => img.naturalWidth),
+      )
+      .toBeGreaterThan(0);
+  await loaded('Düse');
+  await expect(region.getByRole('img', { name: 'Düse' })).toHaveCSS('transform', /matrix\(-1/);
+  await region.getByRole('tab', { name: 'Druckraum' }).click();
+  await loaded('Druckraum');
+  await expect(region.getByRole('tab', { name: 'Druckraum' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+
+  // Das Passwort der Webcam landet nie im Browser
+  await page.getByRole('button', { name: 'P1S Kameras' }).click();
+  await page.getByRole('button', { name: 'Düse bearbeiten' }).click();
+  await expect(page.getByRole('textbox', { name: 'Stream-Adresse', exact: true })).toHaveValue(
+    `http://cam:•••@127.0.0.1:${FAKE_HA_PORT}/webcam/?action=stream`,
+  );
+  expect(await page.content()).not.toContain('geheim');
+});

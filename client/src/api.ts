@@ -1,7 +1,10 @@
 import {
   ACTIVE_PRINT_STATES,
   type FilamentBooking,
+  type HaCameraList,
   type HaStatus,
+  type PrinterCamera,
+  type PrinterCameraInput,
   type PrinterAction,
   type PrinterLiveResponse,
   type PrintSpeed,
@@ -228,6 +231,45 @@ export function usePrinterLive(printerId: number) {
       return (ACTIVE_PRINT_STATES as readonly string[]).includes(data.live.state) ? 5_000 : 15_000;
     },
   });
+}
+
+export function useCameras(printerId: number) {
+  return useQuery({
+    queryKey: ['cameras', printerId],
+    queryFn: () => api.get<PrinterCamera[]>(`/printers/${printerId}/cameras`),
+  });
+}
+
+/** Kamera-Entities aus Home Assistant – nur laden, wenn der Dialog offen ist */
+export function useHaCameras(enabled: boolean) {
+  return useQuery({
+    queryKey: ['ha-cameras'],
+    queryFn: () => api.get<HaCameraList>('/ha/cameras'),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/** Kameras eines Druckers anlegen, ändern, löschen und sortieren */
+export function useCameraSave(printerId: number) {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['cameras', printerId] });
+  const save = useMutation({
+    mutationFn: ({ id, ...body }: PrinterCameraInput & { id?: number }) =>
+      id
+        ? api.put<PrinterCamera>(`/cameras/${id}`, body)
+        : api.post<PrinterCamera>(`/printers/${printerId}/cameras`, body),
+    onSuccess: invalidate,
+  });
+  const remove = useMutation({
+    mutationFn: (id: number) => api.del(`/cameras/${id}`),
+    onSuccess: invalidate,
+  });
+  const order = useMutation({
+    mutationFn: (ids: number[]) => api.put<void>(`/printers/${printerId}/cameras/order`, { ids }),
+    onSuccess: invalidate,
+  });
+  return { save, remove, order };
 }
 
 export function usePrinterControl(printerId: number) {
