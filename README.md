@@ -76,9 +76,17 @@ Handy ─HTTPS─▶ Cloudflare ─Tunnel─▶ Authentik-Outpost ─HTTP─▶ 
    Internal host `http://<Server-IP>:3100`, dazu eine Application und beides dem Outpost zuweisen.
 4. **Cloudflare:** Im Tunnel einen Public Hostname `druckwerk.<domain>` auf den Outpost legen – wie bei
    deinen anderen Diensten.
-5. **Daten umziehen:** Am PC `npm run export -w server` (geht bei laufendem Server). Den Inhalt des
-   erzeugten Ordners `server/data/export/druckwerk-…` ins Volume kopieren und den Container neu starten,
-   z.B. `docker cp druckwerk-…/. druckwerk:/data/` und dann `docker restart druckwerk`.
+5. **Daten umziehen:** Am PC `npm run export -w server` (geht bei laufendem Server) und den erzeugten
+   Ordner `server/data/export/druckwerk-…` auf den Server kopieren. Dort den Container **stoppen** und
+   die Daten mit einem Hilfscontainer ins Volume legen – die alten Datenbankdateien müssen weg, sonst
+   spielt SQLite die `-wal`-Datei der leeren Start-Datenbank in die kopierte ein:
+
+   ```bash
+   docker run --rm -v druckwerk_druckwerk-data:/data -v /pfad/zum/druckwerk-…:/import alpine sh -c "rm -f /data/3dapp.db*; cp -r /import/. /data/"
+   ```
+
+   Dann den Container wieder starten. Den Volume-Namen zeigt Portainer unter _Volumes_ (Stack-Name +
+   `_druckwerk-data`). Danach den Server am PC beenden, sonst bucht auch er weiter Filament ab.
 6. **Home Assistant:** In den Einstellungen die Adresse auf die lokale (`http://<HA-IP>:8123`) ändern –
    schneller und unabhängig vom Internet. Der Token bleibt.
 7. **Handy:** `https://druckwerk.<domain>` öffnen, anmelden, im Menü „Zum Startbildschirm“ – mit dem echten
