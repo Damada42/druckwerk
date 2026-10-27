@@ -46,7 +46,7 @@ export function Layout() {
     <div className="flex min-h-dvh">
       <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-line bg-surface px-3 py-5 md:flex">
         <div className="mb-6 flex items-center gap-2.5 px-2">
-          <img src="/icon.svg" alt="" className="h-8 w-8" />
+          <img src="icon.svg" alt="" className="h-8 w-8" />
           <span className="text-lg font-semibold tracking-tight">Druckwerk</span>
         </div>
         <nav className="flex flex-col gap-0.5">

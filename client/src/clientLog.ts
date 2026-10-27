@@ -1,12 +1,17 @@
+import { appUrl } from './base';
+
 /** Meldet einen Schritt oder Fehler ans Server-Log (für die Fehlersuche auf Handys). Wirft nie. */
 export function clientLog(event: string, data?: Record<string, unknown>) {
   try {
     const body = JSON.stringify({ event, data });
     // sendBeacon überlebt auch Seitenwechsel; Fallback auf fetch
     if (
-      !navigator.sendBeacon?.('/api/client-log', new Blob([body], { type: 'application/json' }))
+      !navigator.sendBeacon?.(
+        appUrl('/api/client-log'),
+        new Blob([body], { type: 'application/json' }),
+      )
     ) {
-      fetch('/api/client-log', {
+      fetch(appUrl('/api/client-log'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body,

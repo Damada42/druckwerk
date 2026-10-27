@@ -1,0 +1,1 @@
+ALTER TABLE `ha_connections` ADD `local` integer DEFAULT false NOT NULL;

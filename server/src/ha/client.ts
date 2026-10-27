@@ -47,6 +47,9 @@ interface RawEntity {
   m: string | null;
 }
 
+/** Home Assistant aus Sicht einer HA-App (REST-API unter /core/api, Token = SUPERVISOR_TOKEN) */
+export const SUPERVISOR_URL = 'http://supervisor/core';
+
 /** Fehler mit verständlicher deutscher Meldung für die Oberfläche */
 export class HaError extends Error {
   constructor(
@@ -85,16 +88,30 @@ export interface FetchedEntities {
  * Verwaltet alle Home-Assistant-Verbindungen (Standorte). Drucker werden über ihre Device-ID
  * gefunden – die ist in jedem HA eindeutig, daher muss ein Drucker seinen Standort nicht kennen.
  */
-export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch) {
+export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch, supervisorToken?: string) {
   const cache = new Map<number, { at: number; promise: Promise<HaEntity[]> }>();
 
+  // Als HA-App: Verbindung zum eigenen Home Assistant anlegen, falls es sie noch nicht gibt
+  if (
+    supervisorToken &&
+    !db.select().from(schema.haConnections).where(eq(schema.haConnections.local, true)).get()
+  ) {
+    db.insert(schema.haConnections)
+      .values({ name: 'Home Assistant', url: SUPERVISOR_URL, token: '', local: true })
+      .run();
+  }
+
+  /** Lokale Verbindung: Adresse und Token vom Supervisor (fehlt der Token, ist token leer) */
+  const resolve = (row: Connection): Connection =>
+    row.local ? { ...row, url: SUPERVISOR_URL, token: supervisorToken ?? '' } : row;
+
   const connections = () =>
-    db.select().from(schema.haConnections).orderBy(schema.haConnections.id).all();
+    db.select().from(schema.haConnections).orderBy(schema.haConnections.id).all().map(resolve);
 
   const byId = (id: number) => {
     const row = db.select().from(schema.haConnections).where(eq(schema.haConnections.id, id)).get();
     if (!row) throw new HaError('Diese Verbindung gibt es nicht.', 404);
-    return row;
+    return resolve(row);
   };
 
   /**
@@ -107,6 +124,9 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch) {
     init: RequestInit = {},
     stream?: AbortSignal,
   ) {
+    // Lokale Verbindung, aber Druckwerk läuft gerade nicht als HA-App (z.B. Daten umgezogen)
+    if (!target.token)
+      throw new HaError(`„${target.name}“ geht nur, wenn Druckwerk als Home-Assistant-App läuft.`);
     let res: Response;
     try {
       res = await fetchWithTimeout(
@@ -206,7 +226,12 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch) {
       return {
         connections: await Promise.all(
           all.map(async (conn) => {
-            const base = { id: conn.id, name: conn.name, url: maskUrl(conn.url) };
+            const base = {
+              id: conn.id,
+              name: conn.name,
+              url: conn.local ? 'Dieses Home Assistant (App)' : maskUrl(conn.url),
+              local: conn.local,
+            };
             try {
               const [version, list] = await Promise.all([
                 check(conn),
@@ -241,6 +266,16 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch) {
     /** Ändern; leere Adresse oder leerer Token = bisherigen Wert behalten */
     async update(id: number, input: { name?: string; url?: string; token?: string }) {
       const current = byId(id);
+      // Beim eigenen Home Assistant kommen Adresse und Token vom Supervisor: nur umbenennen
+      if (current.local) {
+        cache.delete(id);
+        return db
+          .update(schema.haConnections)
+          .set({ name: input.name?.trim() || current.name })
+          .where(eq(schema.haConnections.id, id))
+          .returning()
+          .get();
+      }
       const target = {
         name: input.name?.trim() || current.name,
         url: input.url?.trim() ? normalizeUrl(input.url) : current.url,
@@ -258,7 +293,11 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch) {
     },
 
     remove(id: number) {
-      byId(id);
+      if (byId(id).local && supervisorToken)
+        throw new HaError(
+          'Die Verbindung zum eigenen Home Assistant lässt sich nicht trennen.',
+          400,
+        );
       db.delete(schema.haConnections).where(eq(schema.haConnections.id, id)).run();
       cache.delete(id);
     },

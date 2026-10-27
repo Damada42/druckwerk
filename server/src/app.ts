@@ -1,8 +1,14 @@
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import { eq } from 'drizzle-orm';
-import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
-import { existsSync, mkdirSync } from 'node:fs';
+import Fastify, {
+  type FastifyError,
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+} from 'fastify';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { createDb, schema } from './db/index.js';
 import { parseId, registerCrud } from './routes/crud.js';
 import { registerInvoiceRoutes } from './routes/invoices.js';
@@ -32,6 +38,33 @@ export interface AppOptions {
   haFetch?: typeof fetch;
   /** Hinter einem Reverse-Proxy (Cloudflare/Authentik): X-Forwarded-*-Header übernehmen */
   trustProxy?: boolean;
+  /**
+   * Als Home-Assistant-App: Token des Supervisors. Damit gibt es automatisch die Verbindung zum
+   * eigenen Home Assistant, und Anfragen werden nur noch über Ingress angenommen.
+   */
+  supervisorToken?: string;
+}
+
+/** Home-Assistant-Ingress-Pfad, wie ihn der Supervisor im Header X-Ingress-Path mitschickt */
+const INGRESS_PATH = /^\/api\/hassio_ingress\/[\w-]+$/;
+
+/** Adressen, von denen im App-Betrieb Anfragen kommen dürfen: Ingress-Gateway und Healthcheck */
+const INGRESS_ALLOWED = new Set([
+  '172.30.32.2',
+  '::ffff:172.30.32.2',
+  '127.0.0.1',
+  '::ffff:127.0.0.1',
+  '::1',
+]);
+
+/**
+ * Unter Ingress liegt die App unter /api/hassio_ingress/<token>/ – das <base href> in index.html
+ * zeigt dorthin, alle Adressen im Client sind relativ dazu (siehe client/src/base.ts)
+ */
+export function withBase(html: string, ingressPath: string | string[] | undefined) {
+  const base =
+    typeof ingressPath === 'string' && INGRESS_PATH.test(ingressPath) ? `${ingressPath}/` : '/';
+  return html.replace('<base href="/" />', `<base href="${base}" />`);
 }
 
 export async function buildApp(options: AppOptions) {
@@ -59,10 +92,22 @@ export async function buildApp(options: AppOptions) {
     reply.code(status).send({ error: status >= 500 ? 'Interner Fehler' : error.message });
   });
 
-  const ha = createHaClient(db, options.haFetch);
+  if (options.supervisorToken) {
+    // Die App hat keine eigene Anmeldung: nur über Ingress (HA-Login) erreichbar
+    app.addHook('onRequest', async (req, reply) => {
+      if (!INGRESS_ALLOWED.has(req.socket.remoteAddress ?? ''))
+        return reply.code(403).send({ error: 'Nur über Home Assistant erreichbar.' });
+    });
+  }
+
+  const ha = createHaClient(db, options.haFetch, options.supervisorToken);
   const watcher = createWatcher(db, ha, app.log);
   if (options.haPollMs) watcher.start(options.haPollMs);
-  app.addHook('onClose', async () => watcher.stop());
+  app.addHook('onClose', async () => {
+    watcher.stop();
+    // Datei freigeben (unter Windows sonst gesperrt)
+    db.$client.close();
+  });
 
   await app.register(fastifyMultipart, { limits: { fileSize: 25 * 1024 * 1024 } });
   await app.register(fastifyStatic, {
@@ -132,17 +177,26 @@ export async function buildApp(options: AppOptions) {
   );
 
   if (options.clientDir && existsSync(options.clientDir)) {
+    const indexHtml = readFileSync(path.join(options.clientDir, 'index.html'), 'utf8');
     await app.register(fastifyStatic, {
       root: options.clientDir,
       prefix: '/',
       decorateReply: true,
+      // index.html nie direkt, sondern immer mit passendem <base href> (sendIndex)
+      index: false,
     });
+    const sendIndex = (req: FastifyRequest, reply: FastifyReply) =>
+      reply
+        .header('cache-control', 'no-cache')
+        .type('text/html')
+        .send(withBase(indexHtml, req.headers['x-ingress-path']));
+    app.get('/', sendIndex);
     // SPA: unbekannte Pfade außerhalb von /api liefern index.html
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api') || req.url.startsWith('/uploads')) {
         return reply.code(404).send({ error: 'Nicht gefunden' });
       }
-      return reply.sendFile('index.html');
+      return sendIndex(req, reply);
     });
   }
 

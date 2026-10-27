@@ -33,6 +33,20 @@ Env vars: `API_PORT` (default 3000; deliberately not `PORT`, which the preview t
 - `npm run export -w server` writes a consistent DB copy plus uploads to `server/data/export/` for moving data into the container.
 - Without Docker on the PC, verify the Dockerfile's runtime stage by replaying it in a temp folder: copy only what it copies, then `npm ci --omit=dev -w server -w shared` and `node --import tsx src/index.ts`.
 
+## Home Assistant App
+
+HA renamed add-ons to "Apps" in 2026.2; use that term with the user. The same Docker image runs as a Docker container and as an HA App.
+
+- This repo is the App repository: `repository.yaml` at the root, the App in `ha-app/` (`config.yaml`, `DOCS.md`). The Supervisor pulls `ghcr.io/damada42/druckwerk:<version from ha-app/config.yaml>`; CI tags the image with that version. HA only offers an update after that version is bumped.
+- Ingress serves the App under `/api/hassio_ingress/<token>/` and strips that prefix before the request reaches the server, sending it in `X-Ingress-Path`. Because of this:
+  - `client/index.html` has `<base href="/" />`. `withBase` in `app.ts` replaces it with the ingress path (the header is validated first), so index.html is always served through `sendIndex` (`index: false` on @fastify/static).
+  - Every URL in the client must be relative. Use `appUrl('/api/…')` from `client/src/base.ts` for fetches and `<img src>`, and plain relative paths for static files. Vite builds with `base: './'`, and the router gets `basename` from `document.baseURI`. Under ingress no service worker is registered.
+  - `e2e/ingress.spec.ts` runs the app behind `e2e/ingress-proxy.ts` (port 3298), which mimics ingress, and fails on any request outside the prefix.
+- With `SUPERVISOR_TOKEN` set (`supervisorToken` in `buildApp`):
+  - The server only accepts requests from the ingress gateway `172.30.32.2` and from localhost (Docker healthcheck), since the app has no auth of its own.
+  - `createHaClient` creates one `ha_connections` row with `local = true`. Its URL (`http://supervisor/core`) and token are resolved at runtime and never stored. It can be renamed but not removed. Without a supervisor token (data moved back to Docker), it reports an error and can be deleted.
+- Data lives in `/config` (`addon_config` map), so it's reachable via Samba and included in HA backups. `backup_pre` runs `src/checkpoint.ts` to flush the SQLite WAL first.
+
 ## Architecture
 
 The repo is an npm-workspaces monorepo: `shared/`, `server/`, `client/`.
@@ -108,6 +122,6 @@ React 19, Vite 7, Tailwind v4 (tokens in `index.css`), React Router 7 and TanSta
 - Roadmap:
   - Done: phases 1 (core + Kanban), 2 (filament scan), 3 (invoice reading) and 4 (Home Assistant for the Bambu Lab P1S). Phase 4 covers live status, control, speed, skipping objects, AMS linking and import, automatic filament deduction and several HA locations.
   - Done since: several cameras per printer (HA entities or direct MJPEG URLs).
-  - Next: package Druckwerk as a Home Assistant App (HA renamed add-ons to "Apps" in 2026.2). The user's HA runs as an HA OS VM on Proxmox (amd64). The plan is Ingress (so all client URLs must become relative to the ingress path), an automatic local connection via `SUPERVISOR_TOKEN`, extra HA instances still via URL + token, and the Docker/Authentik variant kept from the same image.
-  - After that, a Klipper printer (Artillery "SidewinderX1", via the `moonraker` integration in HA). Its HA entities couldn't be inspected yet because the printer was offline. Look at the real data first: Klipper skips objects via `EXCLUDE_OBJECT`, and the app's live status only understands `bambu_lab` so far.
+  - Done since: Druckwerk as a Home Assistant App (see "Home Assistant App" below). Not yet tried on the user's real HA (HA OS VM on Proxmox, amd64).
+  - Next, a Klipper printer (Artillery "SidewinderX1", via the `moonraker` integration in HA). Its HA entities couldn't be inspected yet because the printer was offline. Look at the real data first: Klipper skips objects via `EXCLUDE_OBJECT`, and the app's live status only understands `bambu_lab` so far.
 - The user's Home Assistant is reachable through the HA MCP tools in this environment. Use them (read-only) to look at real entity data, e.g. `ha_eval_template` with `BAMBU_TEMPLATE`. Never put the user's token anywhere; the user enters it in the app.

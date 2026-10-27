@@ -2,8 +2,9 @@ import { chromium } from '@playwright/test';
 import bwipjs from 'bwip-js';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { FAKE_CAMERA, FAKE_HA_PORT } from '../playwright.config';
+import { APP_PORT, FAKE_CAMERA, FAKE_HA_PORT, INGRESS_PORT } from '../playwright.config';
 import { FakeHa, type RawEntity } from '../server/test/fake-ha';
+import { startIngressProxy } from './ingress-proxy';
 
 export const LIVE_EAN = '9783161484100';
 
@@ -37,5 +38,10 @@ export default async function globalSetup() {
   ) as RawEntity[];
   const ha = new FakeHa(fixture);
   await ha.listen(FAKE_HA_PORT);
-  return () => ha.close();
+  // Wie Home-Assistant-Ingress vor dem Testserver
+  const ingress = await startIngressProxy(INGRESS_PORT, APP_PORT);
+  return async () => {
+    await ha.close();
+    await new Promise((resolve) => ingress.close(resolve));
+  };
 }

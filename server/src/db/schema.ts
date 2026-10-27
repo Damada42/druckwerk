@@ -153,6 +153,11 @@ export const haConnections = sqliteTable('ha_connections', {
   name: text('name').notNull(),
   url: text('url').notNull(),
   token: text('token').notNull(),
+  /**
+   * Das eigene Home Assistant, wenn Druckwerk als HA-App läuft: Adresse und Token kommen vom
+   * Supervisor (SUPERVISOR_TOKEN) und stehen nicht in der Datenbank
+   */
+  local: integer('local', { mode: 'boolean' }).notNull().default(false),
   createdAt: createdAt(),
 });
 

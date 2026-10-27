@@ -13,6 +13,11 @@ RUN npm run build -w client
 
 FROM node:24-bookworm-slim
 WORKDIR /app
+# Dasselbe Image läuft auch als Home-Assistant-App (ha-app/config.yaml); die Labels braucht der Supervisor
+ARG BUILD_VERSION=dev
+LABEL io.hass.type="addon" \
+      io.hass.arch="amd64" \
+      io.hass.version="${BUILD_VERSION}"
 ENV NODE_ENV=production \
     HTTPS=false \
     API_PORT=3000 \

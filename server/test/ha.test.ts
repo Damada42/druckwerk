@@ -202,6 +202,7 @@ describe('Home-Assistant-Anbindung über die API', () => {
           id: 1,
           name: 'Zuhause',
           url: 'http://ha•••.test:8123',
+          local: false,
           ok: true,
           version: '2026.10.4',
           printers: [{ id: DEVICE, name: 'the_one', model: 'P1S', location: 'Zuhause' }],

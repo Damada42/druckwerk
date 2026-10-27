@@ -1,0 +1,5 @@
+# Home-Assistant-App-Repository: in HA unter Einstellungen → Apps → App Store → ⋮ → Repositories
+# die Adresse dieses GitHub-Repos eintragen. Die App selbst liegt in ha-app/.
+name: Druckwerk
+url: https://github.com/Damada42/druckwerk
+maintainer: Damada42

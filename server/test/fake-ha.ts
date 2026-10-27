@@ -207,7 +207,8 @@ export class FakeHa {
     const headers = new Headers(init?.headers);
     const res = this.handle(
       init?.method ?? 'GET',
-      url.pathname,
+      // Als HA-App spricht der Server HA über http://supervisor/core/api/… an
+      url.pathname.replace(/^\/core(?=\/api\/)/, ''),
       headers.get('authorization'),
       String(init?.body ?? ''),
       url.searchParams,

@@ -1,0 +1,31 @@
+# Druckwerk als Home-Assistant-App (bis HA 2026.2 „Add-on“). HA lädt das fertige Image
+# ghcr.io/damada42/druckwerk:<version> – die Version hier muss es dort geben (GitHub Actions
+# taggt das Image mit dieser Version). Für ein Update in HA: Version erhöhen und pushen.
+name: Druckwerk
+version: '0.2.0'
+slug: druckwerk
+description: 3D-Druck-Manager – Projekte, Filament, Drucker mit Live-Status und Kameras
+url: https://github.com/Damada42/druckwerk
+arch:
+  - amd64
+image: ghcr.io/damada42/druckwerk
+init: false
+startup: application
+boot: auto
+# Oberfläche in der HA-Seitenleiste, Anmeldung über HA; kein eigener Port nach außen
+ingress: true
+ingress_port: 3000
+panel_icon: mdi:printer-3d
+panel_title: Druckwerk
+# SUPERVISOR_TOKEN für das eigene Home Assistant (Drucker, Kameras)
+homeassistant_api: true
+# Datenbank, Rechnungen und Log in /config – per Samba-Freigabe „addon_configs“ erreichbar
+# und Teil der HA-Backups
+map:
+  - type: addon_config
+    read_only: false
+environment:
+  DATA_DIR: /config
+backup: hot
+# Vor dem Backup die SQLite-WAL-Datei in die Datenbank schreiben, damit die Kopie vollständig ist
+backup_pre: node --import tsx src/checkpoint.ts

@@ -87,12 +87,23 @@ Handy ─HTTPS─▶ Cloudflare ─Tunnel─▶ Authentik-Outpost ─HTTP─▶ 
 
    Dann den Container wieder starten. Den Volume-Namen zeigt Portainer unter _Volumes_ (Stack-Name +
    `_druckwerk-data`). Danach den Server am PC beenden, sonst bucht auch er weiter Filament ab.
+
 6. **Home Assistant:** In den Einstellungen die Adresse auf die lokale (`http://<HA-IP>:8123`) ändern –
    schneller und unabhängig vom Internet. Der Token bleibt.
 7. **Handy:** `https://druckwerk.<domain>` öffnen, anmelden, im Menü „Zum Startbildschirm“ – mit dem echten
    Zertifikat installiert sich Druckwerk jetzt als richtige App.
 
 Läuft die Anmeldung ab, lädt die App von selbst neu und landet beim Authentik-Login.
+
+## Als Home-Assistant-App
+
+Druckwerk läuft auch direkt in Home Assistant (HA OS), mit Seitenleisten-Eintrag und HA-Login – ohne
+Authentik, Tunnel oder Token für das eigene HA. In HA unter **Einstellungen → Apps → App Store → ⋮ →
+Repositories** die Adresse dieses Repos eintragen und **Druckwerk** installieren. Details, Datenumzug
+und Hinweise: [`ha-app/DOCS.md`](ha-app/DOCS.md).
+
+Für ein Update in HA die Version in `ha-app/config.yaml` erhöhen und auf `main` pushen – GitHub Actions
+baut das Image mit dieser Version.
 
 ## Aufbau
 

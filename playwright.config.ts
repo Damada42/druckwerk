@@ -3,12 +3,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 // Eigener Port und frische Datenbank pro Lauf – deine echten Daten bleiben unberührt.
-const PORT = 3200;
+export const APP_PORT = 3200;
+const PORT = APP_PORT;
 const DATA_DIR = path.join(tmpdir(), `druckwerk-e2e-${Date.now()}`);
 /** Virtuelles Kamerabild mit Barcode, erzeugt in global-setup.ts */
 export const FAKE_CAMERA = path.join(tmpdir(), 'druckwerk-fake-camera.mjpeg');
 /** Nachgebautes Home Assistant aus global-setup.ts */
 export const FAKE_HA_PORT = 3299;
+/** Nachgebautes Home-Assistant-Ingress vor dem Testserver (e2e/ingress-proxy.ts) */
+export const INGRESS_PORT = 3298;
 
 export default defineConfig({
   testDir: './e2e',

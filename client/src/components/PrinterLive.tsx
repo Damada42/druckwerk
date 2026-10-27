@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { appUrl } from '../base';
 import {
   useAmsImport,
   useAmsLink,
@@ -174,7 +175,9 @@ function LiveDetails({ printer, live }: { printer: Printer; live: PrinterLive })
         <div className="flex gap-3">
           {live.coverVersion && (
             <img
-              src={`/api/printers/${printer.id}/cover?v=${encodeURIComponent(live.coverVersion)}`}
+              src={appUrl(
+                `/api/printers/${printer.id}/cover?v=${encodeURIComponent(live.coverVersion)}`,
+              )}
               alt=""
               className="h-16 w-16 shrink-0 rounded-lg border border-line bg-surface-2 object-contain"
               onError={(e) => (e.currentTarget.style.display = 'none')}
@@ -366,7 +369,9 @@ function SkipDialog({
       <div className="space-y-3">
         {live.plateVersion && (
           <img
-            src={`/api/printers/${printer.id}/plate?v=${encodeURIComponent(live.plateVersion)}`}
+            src={appUrl(
+              `/api/printers/${printer.id}/plate?v=${encodeURIComponent(live.plateVersion)}`,
+            )}
             alt="Druckplatte mit den Teilen"
             className="mx-auto max-h-64 w-full rounded-lg border border-line bg-surface-2 object-contain"
             onError={(e) => (e.currentTarget.style.display = 'none')}

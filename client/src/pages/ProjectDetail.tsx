@@ -21,6 +21,7 @@ import {
 import { Camera, FileText, Paperclip, Plus, Trash2 } from 'lucide-react';
 import { useRef, useState, type FormEvent } from 'react';
 import { useInvoices, useList, useSave } from '../api';
+import { appUrl } from '../base';
 import { clientLog, errorInfo } from '../clientLog';
 import {
   Avatar,
@@ -705,7 +706,7 @@ function InvoicesTab({ project }: { project: ProjectWithDetails }) {
               <span className="font-medium tabular-nums">{euro(inv.amount)}</span>
               {inv.filePath && (
                 <a
-                  href={inv.filePath}
+                  href={appUrl(inv.filePath)}
                   target="_blank"
                   rel="noreferrer"
                   className="text-accent hover:underline"

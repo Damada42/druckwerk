@@ -25,6 +25,8 @@ const { app } = await buildApp({
   // Während eines Drucks merkt sich der Server alle 20 s den aktiven AMS-Slot
   haPollMs: Number(process.env.HA_POLL_MS ?? 20_000),
   trustProxy: process.env.TRUST_PROXY === 'true',
+  // Setzt der Supervisor, wenn Druckwerk als Home-Assistant-App läuft
+  supervisorToken: process.env.SUPERVISOR_TOKEN || undefined,
   https: tls && { key: tls.key, cert: tls.cert },
 });
 

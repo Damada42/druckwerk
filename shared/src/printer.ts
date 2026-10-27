@@ -347,6 +347,8 @@ export interface HaConnectionStatus {
   name: string;
   /** Teilweise unkenntlich gemacht – die volle Adresse und der Token bleiben auf dem Server */
   url: string;
+  /** Das eigene Home Assistant der HA-App (Adresse und Token vom Supervisor) */
+  local: boolean;
   ok: boolean;
   error?: string;
   version?: string;

@@ -16,6 +16,7 @@ import {
   VideoOff,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { appUrl } from '../base';
 import { useCameraSave, useCameras, useHaCameras, useHaStatus } from '../api';
 import { Button, ErrorText, Field, Modal, Select, TextInput, cx } from './ui';
 
@@ -123,8 +124,8 @@ function CameraView({ camera, active }: { camera: PrinterCamera; active: boolean
 
   const src =
     mode === 'live'
-      ? `/api/cameras/${camera.id}/stream?a=${attempt}`
-      : `/api/cameras/${camera.id}/snapshot?t=${tick}`;
+      ? appUrl(`/api/cameras/${camera.id}/stream?a=${attempt}`)
+      : appUrl(`/api/cameras/${camera.id}/snapshot?t=${tick}`);
 
   return (
     <div
@@ -193,7 +194,7 @@ function Thumbnail({ camera, active }: { camera: PrinterCamera; active: boolean 
     <span className="relative block h-14 w-24 overflow-hidden rounded bg-black">
       {camera.hasSnapshot && !failed ? (
         <img
-          src={`/api/cameras/${camera.id}/snapshot?t=${tick}`}
+          src={appUrl(`/api/cameras/${camera.id}/snapshot?t=${tick}`)}
           alt=""
           style={rotated(camera.rotation)}
           onError={() => setFailed(true)}

@@ -7,8 +7,10 @@
     <!-- Eigenes helles und dunkles Design: Browser (z.B. Samsung Internet) sollen nicht selbst umfärben,
          sonst stimmen die Filamentfarben nicht mehr -->
     <meta name="color-scheme" content="light dark" />
-    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <!-- Wird vom Server unter Home-Assistant-Ingress ersetzt (siehe src/base.ts) -->
+    <base href="/" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
     <title>Druckwerk</title>
   </head>
   <body>

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
+import { basePath, underIngress } from './base';
 import { clientLog, installGlobalErrorLogging } from './clientLog';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
@@ -18,9 +19,11 @@ const queryClient = new QueryClient({
 
 installGlobalErrorLogging();
 // Offline-Cache; scheitert bei selbst erstelltem Zertifikat – dann läuft die App einfach ohne
-registerSW({ immediate: true, onRegisterError: () => undefined });
+// Unter Home-Assistant-Ingress ändert sich der Pfad mit jeder Sitzung – dort kein Offline-Cache
+if (!underIngress) registerSW({ immediate: true, onRegisterError: () => undefined });
 clientLog('app-start', {
   path: location.pathname,
+  ingress: underIngress,
   // „reload“ direkt nach einem Scan deutet auf einen vom System beendeten Tab hin
   navigation: (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming)?.type,
   memoryGB: (navigator as { deviceMemory?: number }).deviceMemory,
@@ -31,7 +34,7 @@ clientLog('app-start', {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter basename={basePath || undefined}>
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<DashboardPage />} />

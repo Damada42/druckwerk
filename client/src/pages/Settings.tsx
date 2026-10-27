@@ -106,17 +106,20 @@ function ConnectionRow({
           >
             <Pencil size={15} />
           </Button>
-          <Button
-            variant="ghost"
-            className="!p-1.5"
-            aria-label={`${c.name} trennen`}
-            onClick={() =>
-              confirm(`Verbindung „${c.name}“ trennen? Adresse und Token werden gelöscht.`) &&
-              remove.mutate(c.id)
-            }
-          >
-            <Trash2 size={15} />
-          </Button>
+          {/* Das eigene HA der App bleibt immer verbunden; ohne App lässt es sich entfernen */}
+          {!(c.local && c.ok) && (
+            <Button
+              variant="ghost"
+              className="!p-1.5"
+              aria-label={`${c.name} trennen`}
+              onClick={() =>
+                confirm(`Verbindung „${c.name}“ trennen? Adresse und Token werden gelöscht.`) &&
+                remove.mutate(c.id)
+              }
+            >
+              <Trash2 size={15} />
+            </Button>
+          )}
         </div>
       </div>
       {c.error && <p className="mt-1.5 text-red-600">{c.error}</p>}
@@ -168,23 +171,28 @@ function ConnectionForm({
           autoFocus
         />
       </Field>
-      <Field label={isNew ? 'Adresse' : 'Neue Adresse (leer = behalten)'}>
-        <TextInput
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder={connection?.url ?? 'z.B. http://homeassistant.local:8123'}
-          autoComplete="off"
-        />
-      </Field>
-      <Field label={isNew ? 'Token' : 'Neuer Token (leer = behalten)'}>
-        <TextInput
-          type="password"
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder={isNew ? 'Langlebiger Zugriffstoken' : '••••••••'}
-          autoComplete="off"
-        />
-      </Field>
+      {/* Beim eigenen HA der App kommen Adresse und Token vom Supervisor */}
+      {!connection?.local && (
+        <>
+          <Field label={isNew ? 'Adresse' : 'Neue Adresse (leer = behalten)'}>
+            <TextInput
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder={connection?.url ?? 'z.B. http://homeassistant.local:8123'}
+              autoComplete="off"
+            />
+          </Field>
+          <Field label={isNew ? 'Token' : 'Neuer Token (leer = behalten)'}>
+            <TextInput
+              type="password"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder={isNew ? 'Langlebiger Zugriffstoken' : '••••••••'}
+              autoComplete="off"
+            />
+          </Field>
+        </>
+      )}
       <div className="flex flex-wrap gap-2 sm:col-span-2">
         <Button type="submit" variant="primary" disabled={!ready || save.isPending}>
           {save.isPending ? 'Prüfe Verbindung…' : isNew ? 'Verbinden' : 'Speichern'}

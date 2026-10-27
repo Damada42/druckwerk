@@ -24,6 +24,7 @@ import type {
   ProjectStatus,
   ProjectWithDetails,
 } from '@3dapp/shared';
+import { appUrl } from './base';
 import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 
 export class ApiError extends Error {}
@@ -50,7 +51,7 @@ function loginExpired(): never {
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${url}`, {
+  const res = await fetch(appUrl(`/api${url}`), {
     ...init,
     // Weiterleitungen nicht folgen: Die API leitet nie weiter, nur ein Login-Proxy tut das
     redirect: 'manual',
