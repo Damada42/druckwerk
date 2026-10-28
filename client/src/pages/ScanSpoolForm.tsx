@@ -1,7 +1,8 @@
 import { KNOWN_MANUFACTURERS, type FilamentSpool } from '@3dapp/shared';
 import { CheckCircle2, Minus, Plus, ScanLine, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useBarcodeLookup, useList, useSpoolBatch } from '../api';
+import { useBarcodeLookup, useList, useSettings, useSpoolBatch } from '../api';
+import { StorageSelect } from './Storage';
 import {
   Button,
   ColorDot,
@@ -26,6 +27,7 @@ interface Form {
   weightTotalG: string;
   price: string;
   location: string;
+  storageLocationId: number | null;
   barcode: string;
   count: number;
   remember: boolean;
@@ -68,6 +70,8 @@ export function ScanSpoolForm({
   const { data: types = [] } = useList('filament-types');
   const { data: finishes = [] } = useList('finishes');
   const { data: spools = [] } = useList('spools');
+  const { data: locations = [] } = useList('storage-locations');
+  const storageOn = !!useSettings().data?.storageLocations;
   const batch = useSpoolBatch();
   const [form, setForm] = useState<Form | null>(null);
   const [sources, setSources] = useState<Partial<Record<keyof Form, Source>>>({});
@@ -105,6 +109,7 @@ export function ScanSpoolForm({
       weightTotalG: str(from('weightTotalG', product?.weightTotalG, g.weightG)) || '1000',
       price: str(from('price', product?.price, undefined)),
       location: '',
+      storageLocationId: null,
       barcode: barcode ?? '',
       count: 1,
       // Allgemeine Hersteller-QR-Codes würden sonst alle Sorten des Herstellers vermischen
@@ -157,6 +162,7 @@ export function ScanSpoolForm({
           price: num(form.price),
           purchaseDate: today,
           location: form.location.trim() || null,
+          storageLocationId: storageOn ? form.storageLocationId : null,
           haTrayEntity: null,
           barcode: form.barcode.trim() || null,
           notes: null,
@@ -304,13 +310,23 @@ export function ScanSpoolForm({
                 onChange={(e) => set('price', e.target.value)}
               />
             </Field>
-            <Field label="Lagerort">
-              <TextInput
-                placeholder="z.B. Regal oben"
-                value={form.location}
-                onChange={(e) => set('location', e.target.value)}
-              />
-            </Field>
+            {storageOn ? (
+              <Field label="Lagerplatz">
+                <StorageSelect
+                  locations={locations}
+                  value={form.storageLocationId}
+                  onChange={(id) => set('storageLocationId', id)}
+                />
+              </Field>
+            ) : (
+              <Field label="Lagerort">
+                <TextInput
+                  placeholder="z.B. Regal oben"
+                  value={form.location}
+                  onChange={(e) => set('location', e.target.value)}
+                />
+              </Field>
+            )}
             <Field label="Barcode">
               <TextInput
                 inputMode="numeric"

@@ -1,7 +1,25 @@
 import type { HaConnectionStatus } from '@3dapp/shared';
-import { CheckCircle2, CircleOff, Home, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  CircleOff,
+  Home,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Warehouse,
+} from 'lucide-react';
 import { useState } from 'react';
-import { useHaConnections, useHaStatus, useList, useSave } from '../api';
+import { Link } from 'react-router-dom';
+import { CompanyCard } from '../components/CompanyCard';
+import {
+  useHaConnections,
+  useHaStatus,
+  useList,
+  useSave,
+  useSaveSettings,
+  useSettings,
+} from '../api';
 import { Button, Card, ErrorText, Field, PageHeader, TextInput, cx } from '../components/ui';
 
 export function SettingsPage() {
@@ -9,14 +27,54 @@ export function SettingsPage() {
     <>
       <PageHeader
         title="Einstellungen"
-        subtitle="Stammdaten für die Auswahllisten und die Verbindung zu Home Assistant."
+        subtitle="Stammdaten, Firmendaten für Angebote und Rechnungen, Lagerplätze und Home Assistant."
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <NameList resource="filament-types" title="Filamenttypen" placeholder="z.B. PLA-CF" />
         <NameList resource="finishes" title="Art / Finish" placeholder="z.B. Seidenmatt" />
       </div>
+      <CompanyCard />
+      <StorageCard />
       <HomeAssistantCard />
     </>
+  );
+}
+
+function StorageCard() {
+  const { data: settings } = useSettings();
+  const saveSettings = useSaveSettings();
+  const on = !!settings?.storageLocations;
+  return (
+    <Card className="mt-4 p-5">
+      <h2 className="mb-3 flex items-center gap-2 font-semibold">
+        <Warehouse size={18} /> Lagerplätze
+      </h2>
+      <label className="flex items-start gap-3 text-sm">
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+          checked={on}
+          disabled={!settings}
+          onChange={(e) => saveSettings.mutate({ storageLocations: e.target.checked })}
+        />
+        <span>
+          <span className="font-medium">Lagerplätze verwalten</span>
+          <span className="block text-muted">
+            Regale und Schränke mit Unterteilungen (z.B. Links › Reihe 2) anlegen und jeder Spule
+            ihren Platz zuordnen. Ausgeschaltet gibt es nur das freie Feld „Lagerort“.
+          </span>
+        </span>
+      </label>
+      {on && (
+        <Link
+          to="/lager"
+          className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:underline"
+        >
+          Lagerplätze einrichten →
+        </Link>
+      )}
+      <ErrorText error={saveSettings.error} />
+    </Card>
   );
 }
 

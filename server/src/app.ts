@@ -18,6 +18,8 @@ import { registerClientLogRoutes } from './routes/clientLog.js';
 import { registerStatsRoutes } from './routes/stats.js';
 import { registerHaRoutes } from './routes/ha.js';
 import { registerCameraRoutes } from './routes/cameras.js';
+import { registerStorageRoutes } from './routes/storage.js';
+import { registerDocumentRoutes } from './routes/documents.js';
 import { createHaClient } from './ha/client.js';
 import { createWatcher } from './ha/watcher.js';
 
@@ -172,6 +174,8 @@ export async function buildApp(options: AppOptions) {
       registerStatsRoutes(api, db);
       registerHaRoutes(api, db, ha);
       registerCameraRoutes(api, db, ha, options.haFetch);
+      registerStorageRoutes(api, db);
+      registerDocumentRoutes(api, db, options.uploadDir);
     },
     { prefix: '/api' },
   );

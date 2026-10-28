@@ -6,9 +6,12 @@ import {
   Printer,
   Settings,
   Users,
+  Warehouse,
   type LucideIcon,
 } from 'lucide-react';
+import type { AppSettings } from '@3dapp/shared';
 import { NavLink, Outlet } from 'react-router-dom';
+import { useSettings } from '../api';
 import { cx } from './ui';
 
 export interface NavItem {
@@ -16,6 +19,14 @@ export interface NavItem {
   label: string;
   icon: LucideIcon;
   description: string;
+  /** Nur zeigen, wenn diese Einstellung an ist */
+  feature?: keyof AppSettings;
+}
+
+/** Menüpunkte ohne ausgeschaltete Funktionen */
+export function useNavItems() {
+  const { data: settings } = useSettings();
+  return NAV_ITEMS.filter((n) => !n.feature || settings?.[n.feature]);
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -29,6 +40,13 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/kunden', label: 'Kunden', icon: Contact, description: 'Kundendatenbank' },
   { to: '/personen', label: 'Team', icon: Users, description: 'Helfer & Unterstützung' },
   { to: '/filament', label: 'Filament', icon: Cylinder, description: 'Bestand nach Material' },
+  {
+    to: '/lager',
+    label: 'Lager',
+    icon: Warehouse,
+    description: 'Lagerplätze der Spulen',
+    feature: 'storageLocations',
+  },
   { to: '/drucker', label: 'Drucker', icon: Printer, description: 'Deine Drucker' },
   {
     to: '/einstellungen',
@@ -38,10 +56,11 @@ export const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-/** Auf dem Handy passen nicht alle Punkte in die untere Leiste. */
-const MOBILE_NAV = NAV_ITEMS.filter((n) => n.to !== '/einstellungen' && n.to !== '/personen');
+/** Auf dem Handy passen nicht alle Punkte in die untere Leiste (Lager über die Filament-Seite) */
+const NOT_ON_MOBILE = new Set(['/einstellungen', '/personen', '/lager']);
 
 export function Layout() {
+  const navItems = useNavItems();
   return (
     <div className="flex min-h-dvh">
       <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-line bg-surface px-3 py-5 md:flex">
@@ -50,7 +69,7 @@ export function Layout() {
           <span className="text-lg font-semibold tracking-tight">Druckwerk</span>
         </div>
         <nav className="flex flex-col gap-0.5">
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+          {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -76,22 +95,24 @@ export function Layout() {
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
-        {MOBILE_NAV.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) =>
-              cx(
-                'flex flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium',
-                isActive ? 'text-accent' : 'text-muted',
-              )
-            }
-          >
-            <Icon size={20} />
-            {label}
-          </NavLink>
-        ))}
+        {navItems
+          .filter((n) => !NOT_ON_MOBILE.has(n.to))
+          .map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              className={({ isActive }) =>
+                cx(
+                  'flex flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium',
+                  isActive ? 'text-accent' : 'text-muted',
+                )
+              }
+            >
+              <Icon size={20} />
+              {label}
+            </NavLink>
+          ))}
       </nav>
     </div>
   );

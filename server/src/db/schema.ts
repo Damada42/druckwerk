@@ -1,6 +1,22 @@
 import { sql } from 'drizzle-orm';
-import { integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import type { CostCategory, InvoiceType, MemberRole, Priority, ProjectStatus } from '@3dapp/shared';
+import {
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+  type AnySQLiteColumn,
+} from 'drizzle-orm/sqlite-core';
+import type {
+  CostCategory,
+  DocumentItem,
+  DocumentKind,
+  InvoiceType,
+  MemberRole,
+  Priority,
+  ProjectStatus,
+} from '@3dapp/shared';
 
 const createdAt = () =>
   text('created_at')
@@ -37,6 +53,17 @@ export const finishes = sqliteTable('finishes', {
   name: text('name').notNull().unique(),
 });
 
+/** Lagerplätze als Baum: Regal/Schrank › Seite › Reihe … */
+export const storageLocations = sqliteTable('storage_locations', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  parentId: integer('parent_id').references((): AnySQLiteColumn => storageLocations.id, {
+    onDelete: 'cascade',
+  }),
+  position: integer('position').notNull().default(0),
+  createdAt: createdAt(),
+});
+
 export const filamentSpools = sqliteTable('filament_spools', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   typeId: integer('type_id')
@@ -52,6 +79,9 @@ export const filamentSpools = sqliteTable('filament_spools', {
   price: real('price'),
   purchaseDate: text('purchase_date'),
   location: text('location'),
+  storageLocationId: integer('storage_location_id').references(() => storageLocations.id, {
+    onDelete: 'set null',
+  }),
   haTrayEntity: text('ha_tray_entity'),
   barcode: text('barcode'),
   notes: text('notes'),
@@ -222,5 +252,31 @@ export const invoices = sqliteTable('invoices', {
   description: text('description'),
   filePath: text('file_path'),
   fileName: text('file_name'),
+  createdAt: createdAt(),
+});
+
+/** Angebote und Rechnungen an Kunden; Inhalt und PDF bleiben so, wie sie erstellt wurden */
+export const projectDocuments = sqliteTable('project_documents', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  projectId: integer('project_id')
+    .notNull()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  kind: text('kind').$type<DocumentKind>().notNull(),
+  number: text('number').notNull().unique(),
+  date: text('date').notNull(),
+  serviceDate: text('service_date'),
+  dueDate: text('due_date'),
+  recipient: text('recipient').notNull(),
+  intro: text('intro'),
+  notes: text('notes'),
+  items: text('items', { mode: 'json' }).$type<DocumentItem[]>().notNull(),
+  smallBusiness: integer('small_business', { mode: 'boolean' }).notNull(),
+  vatRate: real('vat_rate').notNull(),
+  net: real('net').notNull(),
+  vat: real('vat').notNull(),
+  gross: real('gross').notNull(),
+  filePath: text('file_path').notNull(),
+  /** Eintrag unter „Rechnungen“ (Ausgang), der mit dem Dokument angelegt wurde */
+  invoiceId: integer('invoice_id').references(() => invoices.id, { onDelete: 'set null' }),
   createdAt: createdAt(),
 });

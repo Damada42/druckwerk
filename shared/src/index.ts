@@ -131,7 +131,10 @@ export interface FilamentSpool {
   weightRemainingG: number;
   price: number | null;
   purchaseDate: string | null;
+  /** Freitext-Lagerort (ohne Lagerplatz-Verwaltung) */
   location: string | null;
+  /** Lagerplatz, wenn die Lagerplatz-Verwaltung eingeschaltet ist */
+  storageLocationId: number | null;
   /** AMS-Slot (Entity-ID in Home Assistant), in dem die Spule gerade steckt */
   haTrayEntity: string | null;
   /** Barcode (EAN) der Sorte, falls per Scan angelegt */
@@ -288,6 +291,8 @@ export function calcProjectCosts(
 }
 
 export * from './camera';
+export * from './document';
 export * from './invoice';
 export * from './label';
 export * from './printer';
+export * from './storage';

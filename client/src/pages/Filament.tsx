@@ -1,7 +1,8 @@
-import { LOW_FILAMENT_GRAMS, type FilamentSpool } from '@3dapp/shared';
-import { ChevronDown, Copy, Minus, Pencil, Plus, ScanLine } from 'lucide-react';
+import { LOW_FILAMENT_GRAMS, storagePaths, storageTree, type FilamentSpool } from '@3dapp/shared';
+import { ChevronDown, Copy, Minus, Pencil, Plus, ScanLine, Warehouse } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useConsume, useList, useSave } from '../api';
+import { Link } from 'react-router-dom';
+import { useConsume, useList, useSave, useSettings } from '../api';
 import { EntityForm, type FieldDef } from '../components/EntityForm';
 import { ScanDialog, type ScanResult } from './ScanDialog';
 import { ScanSpoolForm } from './ScanSpoolForm';
@@ -41,6 +42,13 @@ export function FilamentPage() {
   const [open, setOpen] = useState<string | null>(null);
   const [scan, setScan] = useState<'dialog' | ScanResult | null>(null);
   const { save } = useSave('spools');
+  const { data: settings } = useSettings();
+  const storageOn = !!settings?.storageLocations;
+  const { data: locations = [] } = useList('storage-locations');
+  const paths = useMemo(() => storagePaths(locations), [locations]);
+  /** Anzeige an der Spule: Lagerplatz, sonst der alte Freitext */
+  const placeOf = (s: FilamentSpool) =>
+    storageOn && s.storageLocationId ? (paths.get(s.storageLocationId) ?? null) : s.location;
 
   const finishName = (id: number | null) => finishes.find((f) => f.id === id)?.name ?? 'Normal';
 
@@ -98,7 +106,14 @@ export function FilamentPage() {
     { key: 'weightRemainingG', label: 'Restmenge (g)', type: 'number' },
     { key: 'price', label: 'Preis pro Spule (€)', type: 'number', step: '0.01' },
     { key: 'purchaseDate', label: 'Kaufdatum', type: 'date' },
-    { key: 'location', label: 'Lagerort', placeholder: 'z.B. AMS Slot 1, Regal oben' },
+    storageOn
+      ? {
+          key: 'storageLocationId',
+          label: 'Lagerplatz',
+          type: 'select',
+          options: storageTree(locations).map((t) => ({ value: t.location.id, label: t.path })),
+        }
+      : { key: 'location', label: 'Lagerort', placeholder: 'z.B. AMS Slot 1, Regal oben' },
     { key: 'notes', label: 'Notizen', type: 'textarea' },
   ];
 
@@ -118,6 +133,14 @@ export function FilamentPage() {
         subtitle={`${spools.length} Spulen · ${grams(totalAll)} auf Lager`}
         actions={
           <>
+            {storageOn && (
+              <Link
+                to="/lager"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-surface px-3.5 py-2 text-sm font-medium transition hover:bg-surface-2"
+              >
+                <Warehouse size={16} /> Lager
+              </Link>
+            )}
             <Button onClick={() => setScan('dialog')}>
               <ScanLine size={16} /> Scannen
             </Button>
@@ -205,6 +228,7 @@ export function FilamentPage() {
                           <SpoolRow
                             key={s.id}
                             spool={s}
+                            place={placeOf(s)}
                             onEdit={() => setEditing(s)}
                             onConsume={() => setConsuming(s)}
                             onDuplicate={() => duplicate(s)}
@@ -254,11 +278,13 @@ export function FilamentPage() {
 
 function SpoolRow({
   spool,
+  place,
   onEdit,
   onConsume,
   onDuplicate,
 }: {
   spool: FilamentSpool;
+  place: string | null;
   onEdit: () => void;
   onConsume: () => void;
   onDuplicate: () => void;
@@ -289,7 +315,7 @@ function SpoolRow({
           <div className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-muted">
             <span>Ø {spool.diameter.toLocaleString('de-DE')} mm</span>
             {spool.price !== null && <span>{euro(spool.price)}</span>}
-            {spool.location && <span>{spool.location}</span>}
+            {place && <span>{place}</span>}
             {spool.haTrayEntity && (
               <span className="font-medium text-accent-strong dark:text-orange-300">
                 {/_slot_(\d+)$/.exec(spool.haTrayEntity)

@@ -9,7 +9,7 @@ import { pipeline } from 'node:stream/promises';
 import { schema, type Db } from '../db/index.js';
 import { parseId } from './crud.js';
 
-const { invoices, projects } = schema;
+const { invoices, projectDocuments, projects } = schema;
 
 const ALLOWED_EXT = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.heic']);
 
@@ -80,7 +80,15 @@ export function registerInvoiceRoutes(app: FastifyInstance, db: Db, uploadDir: s
       .returning()
       .get();
     if (!row) return reply.code(404).send({ error: 'Nicht gefunden' });
-    await removeUpload(uploadDir, row.filePath);
+    // Das PDF einer erstellten Rechnung gehört dem Dokument und bleibt
+    const ofDocument =
+      row.filePath &&
+      db
+        .select({ id: projectDocuments.id })
+        .from(projectDocuments)
+        .where(eq(projectDocuments.filePath, row.filePath))
+        .get();
+    if (!ofDocument) await removeUpload(uploadDir, row.filePath);
     return reply.code(204).send();
   });
 }

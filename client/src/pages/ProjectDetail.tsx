@@ -23,6 +23,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { useInvoices, useList, useSave } from '../api';
 import { appUrl } from '../base';
 import { clientLog, errorInfo } from '../clientLog';
+import { DocumentsTab } from '../components/DocumentsTab';
 import {
   Avatar,
   Button,
@@ -41,7 +42,14 @@ import {
   grams,
 } from '../components/ui';
 
-const TABS = ['Allgemein', 'Team', 'Material', 'Zusatzkosten', 'Rechnungen'] as const;
+const TABS = [
+  'Allgemein',
+  'Team',
+  'Material',
+  'Zusatzkosten',
+  'Rechnungen',
+  'Angebot & Rechnung',
+] as const;
 type Tab = (typeof TABS)[number];
 
 type Draft = Omit<ProjectWithDetails, 'id' | 'createdAt' | 'updatedAt' | 'position' | 'invoices'>;
@@ -160,6 +168,12 @@ export function ProjectDetail({
             <InvoicesTab project={project} />
           ) : (
             <Empty>Rechnungen kannst du nach dem ersten Speichern hinzufügen.</Empty>
+          ))}
+        {tab === 'Angebot & Rechnung' &&
+          (project ? (
+            <DocumentsTab project={project} />
+          ) : (
+            <Empty>Angebote und Rechnungen kannst du nach dem ersten Speichern erstellen.</Empty>
           ))}
         <button type="submit" hidden />
       </form>

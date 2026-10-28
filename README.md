@@ -173,3 +173,19 @@ aufklappbar.
   mehreren Farben wird nach Druckzeit aufgeteilt, abgebrochene Drucke anteilig nach Fortschritt (beides als
   „≈ geschätzt“ markiert). Jede Abbuchung lässt sich auf der Drucker-Seite rückgängig machen. Läuft der
   Server während eines Drucks nicht, wird dieser Druck nicht gebucht.
+
+**Lagerplätze (fertig):** Unter „Einstellungen → Lagerplätze“ einschaltbar. Dann gibt es die Seite
+„Lager“ (am Handy über den Knopf „Lager“ auf der Filament-Seite): Regale und Schränke mit beliebig
+tiefen Unterplätzen anlegen, z.B. „Wandregal › Links › Reihe 2“, umbenennen, sortieren und löschen. Jede
+Spule bekommt ihren Platz per Auswahl – auf der Lager-Seite direkt, im Spulen-Formular und beim Scannen.
+Gelöschte Plätze nehmen ihre Unterplätze mit; die Spulen darin verlieren nur die Zuordnung. Ausgeschaltet
+bleibt das freie Feld „Lagerort“ wie bisher.
+
+**Angebote & Rechnungen (fertig):** Unter „Einstellungen → Firmendaten“ Name, Adresse, Kontakt, Bank,
+optional UID-Nummer und ein Logo eintragen (am besten PNG mit transparentem Hintergrund oder SVG; jedes
+Bildformat wird im Browser in PNG umgewandelt). Mit Haken „Kleinunternehmer“ gibt es keine Umsatzsteuer,
+dafür steht „Kleinunternehmer gemäß § 6 Abs. 1 Z 27 UStG“ auf jedem Dokument; ohne Haken wird mit dem
+eingestellten Satz (Standard 20 %) netto/USt./brutto ausgewiesen. Im Projekt unter „Angebot & Rechnung“
+entsteht das PDF: Empfänger aus dem Kunden, erste Position aus Projekttitel und Preis, fortlaufende
+Nummern pro Jahr (AN-2026-001, RE-2026-001). Aus einem Angebot wird mit „Als Rechnung“ eine Rechnung.
+Rechnungen erscheinen zusätzlich unter „Rechnungen“ als Ausgang. Einmal erstellte PDFs bleiben unverändert.

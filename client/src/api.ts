@@ -20,8 +20,14 @@ import type {
   Input,
   Invoice,
   Person,
+  AppSettings,
+  CompanyProfile,
+  DocumentInput,
+  DocumentKind,
   Printer,
+  ProjectDocument,
   ProjectStatus,
+  StorageLocation,
   ProjectWithDetails,
 } from '@3dapp/shared';
 import { appUrl } from './base';
@@ -91,6 +97,7 @@ export interface Resources {
   'filament-types': FilamentType;
   finishes: Finish;
   projects: ProjectWithDetails;
+  'storage-locations': StorageLocation;
 }
 
 export type ResourceName = keyof Resources;
@@ -107,6 +114,8 @@ export function useSave<R extends ResourceName>(name: R) {
     qc.invalidateQueries({ queryKey: ['stats'] });
     // Verknüpfung mit Home Assistant kann sich geändert haben
     if (name === 'printers') qc.invalidateQueries({ queryKey: ['printer-live'] });
+    // Gelöschte Lagerplätze nehmen die Zuordnung der Spulen mit
+    if (name === 'storage-locations') qc.invalidateQueries({ queryKey: ['spools'] });
   };
   const save = useMutation({
     mutationFn: ({ id, ...data }: Partial<Input<Resources[R]>> & { id?: number }) =>
@@ -118,6 +127,95 @@ export function useSave<R extends ResourceName>(name: R) {
     onSuccess: invalidate,
   });
   return { save, remove };
+}
+
+export function useSettings() {
+  return useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.get<AppSettings>('/settings'),
+    staleTime: 60_000,
+  });
+}
+
+export function useSaveSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<AppSettings>) => api.put<AppSettings>('/settings', body),
+    // Schalter sofort umlegen, bei Fehler zurück
+    onMutate: (body) => {
+      const previous = qc.getQueryData<AppSettings>(['settings']);
+      if (previous) qc.setQueryData(['settings'], { ...previous, ...body });
+      return { previous };
+    },
+    onError: (_err, _body, ctx) => qc.setQueryData(['settings'], ctx?.previous),
+    onSuccess: (data) => qc.setQueryData(['settings'], data),
+  });
+}
+
+export function useCompany() {
+  return useQuery({ queryKey: ['company'], queryFn: () => api.get<CompanyProfile>('/company') });
+}
+
+/** Firmendaten speichern, Logo hochladen (PNG) oder entfernen */
+export function useCompanySave() {
+  const qc = useQueryClient();
+  const onSuccess = (data: CompanyProfile) => qc.setQueryData(['company'], data);
+  const save = useMutation({
+    mutationFn: (body: Partial<CompanyProfile>) => api.put<CompanyProfile>('/company', body),
+    onSuccess,
+  });
+  const logo = useMutation({
+    mutationFn: (png: Blob | null) => {
+      if (!png) return request<CompanyProfile>('/company/logo', { method: 'DELETE' });
+      const form = new FormData();
+      form.append('file', png, 'logo.png');
+      return api.post<CompanyProfile>('/company/logo', form);
+    },
+    onSuccess,
+  });
+  return { save, logo };
+}
+
+/** Angebote und Rechnungen eines Projekts */
+export function useDocuments(projectId: number) {
+  const qc = useQueryClient();
+  const list = useQuery({
+    queryKey: ['documents', projectId],
+    queryFn: () => api.get<ProjectDocument[]>(`/projects/${projectId}/documents`),
+  });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['documents', projectId] });
+    // Rechnungen erscheinen auch unter „Rechnungen“
+    qc.invalidateQueries({ queryKey: ['projects'] });
+    qc.invalidateQueries({ queryKey: ['next-number'] });
+  };
+  const create = useMutation({
+    mutationFn: (input: DocumentInput) =>
+      api.post<ProjectDocument>(`/projects/${projectId}/documents`, input),
+    onSuccess: invalidate,
+  });
+  const remove = useMutation({
+    mutationFn: (id: number) => api.del(`/documents/${id}`),
+    onSuccess: invalidate,
+  });
+  return { list, create, remove };
+}
+
+export function useNextDocumentNumber(kind: DocumentKind) {
+  return useQuery({
+    queryKey: ['next-number', kind],
+    queryFn: () => api.get<{ number: string }>(`/documents/next-number?kind=${kind}`),
+    staleTime: 0,
+  });
+}
+
+/** Reihenfolge von Lagerplätzen auf einer Ebene */
+export function useStorageOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: number[]) => api.put<void>('/storage-locations/order', { ids }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['storage-locations'] }),
+  });
 }
 
 export function useStats() {

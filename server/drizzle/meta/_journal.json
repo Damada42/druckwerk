@@ -57,6 +57,20 @@
       "when": 1793121058884,
       "tag": "0007_ha_local_connection",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793209310436,
+      "tag": "0008_storage_locations",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793209660851,
+      "tag": "0009_project_documents",
+      "breakpoints": true
     }
   ]
 }

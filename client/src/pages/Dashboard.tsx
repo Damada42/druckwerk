@@ -2,7 +2,7 @@ import { LOW_FILAMENT_GRAMS, PROJECT_STATUS_LABELS, type ProjectStatus } from '@
 import { ArrowRight, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useList, useStats } from '../api';
-import { NAV_ITEMS } from '../components/Layout';
+import { useNavItems } from '../components/Layout';
 import { PrinterLiveSummary } from '../components/PrinterLive';
 import { Card, ColorDot, PageHeader, dateDe, grams } from '../components/ui';
 
@@ -14,6 +14,7 @@ const STATUS_DOT: Record<ProjectStatus, string> = {
 
 export function DashboardPage() {
   const { data: stats } = useStats();
+  const navItems = useNavItems();
   const { data: projects = [] } = useList('projects');
   const { data: spools = [] } = useList('spools');
   const { data: printers = [] } = useList('printers');
@@ -49,26 +50,28 @@ export function DashboardPage() {
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        {NAV_ITEMS.filter((n) => n.to !== '/').map(({ to, label, icon: Icon, description }) => (
-          <Link key={to} to={to} className="group">
-            <Card className="flex h-full flex-col gap-3 p-4 transition group-hover:border-accent/60 sm:p-5">
-              <div className="flex items-center justify-between">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft text-accent-strong dark:text-orange-300">
-                  <Icon size={20} />
-                </span>
-                <ArrowRight
-                  size={16}
-                  className="text-muted opacity-0 transition group-hover:opacity-100"
-                />
-              </div>
-              <div>
-                <div className="font-semibold">{label}</div>
-                <div className="text-xs text-muted">{description}</div>
-              </div>
-              <div className="mt-auto text-sm font-medium tabular-nums">{tileInfo[to]}</div>
-            </Card>
-          </Link>
-        ))}
+        {navItems
+          .filter((n) => n.to !== '/')
+          .map(({ to, label, icon: Icon, description }) => (
+            <Link key={to} to={to} className="group">
+              <Card className="flex h-full flex-col gap-3 p-4 transition group-hover:border-accent/60 sm:p-5">
+                <div className="flex items-center justify-between">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft text-accent-strong dark:text-orange-300">
+                    <Icon size={20} />
+                  </span>
+                  <ArrowRight
+                    size={16}
+                    className="text-muted opacity-0 transition group-hover:opacity-100"
+                  />
+                </div>
+                <div>
+                  <div className="font-semibold">{label}</div>
+                  <div className="text-xs text-muted">{description}</div>
+                </div>
+                <div className="mt-auto text-sm font-medium tabular-nums">{tileInfo[to]}</div>
+              </Card>
+            </Link>
+          ))}
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
