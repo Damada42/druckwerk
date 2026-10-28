@@ -69,15 +69,9 @@ export function renderDocumentPdf(
     .fillColor(GREY)
     .text(lines(company.address).join('\n'), { width: W - 190 });
 
-  // Absenderzeile und Empfänger
+  // Empfänger – ohne eigene Absenderzeile darüber, die Adresse steht schon im Kopf und in der
+  // Fußzeile
   const top = 150;
-  pdf
-    .fontSize(7)
-    .fillColor(GREY)
-    .text([company.name, ...lines(company.address)].join(' · '), M, top, {
-      width: 260,
-      underline: true,
-    });
   pdf
     .fontSize(10)
     .fillColor('black')

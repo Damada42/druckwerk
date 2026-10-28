@@ -239,6 +239,8 @@ export interface Project {
   printHours: number | null;
   /** Vorschlag für Angebot/Rechnung: Aufschlag auf jeden Einzelpreis in Prozent */
   markupPercent: number;
+  /** Verkaufspreis folgt automatisch den Gesamtkosten plus Aufschlag */
+  priceAuto: boolean;
   /** Vorschlag für Angebot/Rechnung: eigene UID-Nummer aufs Dokument drucken */
   showVatId: boolean;
   notes: string | null;

@@ -80,7 +80,7 @@ export function costItems(project: ProjectWithDetails, ctx: ItemContext): ItemDr
   return items;
 }
 
-/** Eine Pauschalposition aus Projekttitel und Verkaufspreis (wie bisher) */
+/** Eine Pauschalposition aus Projekttitel und Verkaufspreis – der ist schon der Endpreis, daher ohne Aufschlag */
 export function flatItem(project: ProjectWithDetails): ItemDraft[] {
   return [
     {
@@ -88,7 +88,7 @@ export function flatItem(project: ProjectWithDetails): ItemDraft[] {
       quantity: '1',
       unit: '',
       unitPrice: str(project.price ?? 0),
-      markup: project.markupPercent ? str(project.markupPercent) : '',
+      markup: '',
     },
   ];
 }

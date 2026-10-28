@@ -209,6 +209,11 @@ Nachbearbeitung), jeweils mit Einheit (Stück, Packung, Meter …) und optionale
 übernimmt die gewählte Kategorie Einheit und Preis als Vorschlag; beides bleibt je Position änderbar.
 Ohne Beschreibung steht auf dem Dokument der Kategoriename. Verwendete Kategorien lassen sich nicht löschen.
 
+**Verkaufspreis automatisch:** Bei neuen Projekten folgt der Verkaufspreis den Gesamtkosten plus
+Aufschlag (Gewinn = Aufschlag). Wer selbst einen Preis einträgt, beendet den Automatikbetrieb; der Haken
+„Aus den Kosten berechnen“ schaltet ihn wieder ein. Bestehende Projekte mit Preis behalten ihren Preis.
+Die Pauschalposition im Angebot nimmt den Verkaufspreis ohne weiteren Aufschlag.
+
 **Projekt speichern:** Das Fenster bleibt nach dem Speichern offen und meldet „Gespeichert“ – so geht es
 gleich mit Angebot oder Rechnung weiter.
 

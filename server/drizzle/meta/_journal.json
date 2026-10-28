@@ -85,6 +85,13 @@
       "when": 1793224606996,
       "tag": "0011_cost_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1793227627695,
+      "tag": "0012_price_auto",
+      "breakpoints": true
     }
   ]
 }

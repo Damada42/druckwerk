@@ -136,6 +136,8 @@ export const projects = sqliteTable('projects', {
   printHours: real('print_hours'),
   /** Vorschlag für Angebot/Rechnung: Aufschlag auf jeden Einzelpreis in Prozent */
   markupPercent: real('markup_percent').notNull().default(0),
+  /** Verkaufspreis folgt automatisch den Gesamtkosten plus Aufschlag */
+  priceAuto: integer('price_auto', { mode: 'boolean' }).notNull().default(true),
   /** Vorschlag für Angebot/Rechnung: eigene UID-Nummer aufs Dokument drucken */
   showVatId: integer('show_vat_id', { mode: 'boolean' }).notNull().default(true),
   notes: text('notes'),

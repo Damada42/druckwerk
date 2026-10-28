@@ -125,6 +125,8 @@ describe('Angebote und Rechnungen', () => {
     expect(text).toContain('Angebot AN-2026-001');
     expect(text).toContain(SMALL_BUSINESS_NOTE);
     expect(text).toContain('Erika Muster');
+    // Eigene Adresse nur im Kopf und in der Fußzeile, nicht noch einmal über dem Empfänger
+    expect(text.split('Hauptstraße 1').length - 1).toBe(2);
     expect(text).toContain('27.11.2026');
     expect(text).not.toContain('USt.');
   });

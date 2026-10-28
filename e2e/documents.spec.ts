@@ -103,7 +103,13 @@ test('Aufschlag und UID-Nummer: Vorschlag aus dem Projekt, je Angebot änderbar'
   await request.put('/api/company', { data: { vatId: 'ATU12345678' } });
   const project = await (
     await request.post('/api/projects', {
-      data: { title: 'Lampenschirm', price: 20, markupPercent: 10, showVatId: false },
+      data: {
+        title: 'Lampenschirm',
+        markupPercent: 10,
+        showVatId: false,
+        // Kostenposition: bekommt den Aufschlag (eine Pauschalposition zum Verkaufspreis nicht)
+        costs: [{ category: 'other', description: 'Lampenschirm', quantity: 1, unitPrice: 20 }],
+      },
     })
   ).json();
 
@@ -185,6 +191,12 @@ test('Zusatzkosten-Kategorie mit Einheit und Preis; Angebot listet alle Position
   await page.keyboard.type('12');
   await expect(second.getByLabel('Preis je Einheit €')).toHaveValue('12');
 
+  // Verkaufspreis folgt automatisch: (2 × 5,90 + 12,00) × 1,10 = 26,18 €
+  await d.getByRole('button', { name: 'Allgemein' }).click();
+  await expect(d.getByLabel('Verkaufspreis (€)')).toHaveValue('26,18');
+  await expect(d.getByText('Aus den Kosten: 23,80 € + 10 % Aufschlag')).toBeVisible();
+  await expect(d.getByText('Gewinn').locator('..')).toContainText('2,38');
+
   await d.getByRole('button', { name: 'Speichern' }).click();
   await expect(d.getByRole('status')).toHaveText('Gespeichert');
 
@@ -203,6 +215,9 @@ test('Zusatzkosten-Kategorie mit Einheit und Preis; Angebot listet alle Position
   // Umschalten auf eine Pauschalposition geht auch
   await editor.getByRole('button', { name: 'Pauschal (Verkaufspreis)' }).click();
   await expect(editor.getByLabel('Position 1 Beschreibung')).toHaveValue('Versandkarton-Test');
+  // Der Verkaufspreis enthält den Aufschlag schon – kein zweites Mal
+  await expect(editor.getByLabel('Position 1 Aufschlag in Prozent')).toHaveValue('');
+  await expect(editor.getByText('26,18 €').last()).toBeVisible();
   await expect(editor.getByLabel('Position 2 Beschreibung')).toHaveCount(0);
   await editor.getByRole('button', { name: 'Aus Projektkosten' }).click();
   await editor.getByLabel('Empfänger').fill('Max Muster\n4020 Linz');

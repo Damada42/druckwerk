@@ -96,3 +96,21 @@ describe('Einheiten auf Angebot und Rechnung', () => {
     expect(text).toContain('1,5 Stunde');
   });
 });
+
+describe('Automatischer Verkaufspreis', () => {
+  it('neues Projekt rechnet automatisch, mitgeschickter Preis bleibt fest', async () => {
+    const auto = await send<ProjectWithDetails>('POST', '/api/projects', { title: 'Automatisch' });
+    expect(auto.body.priceAuto).toBe(true);
+    const fixed = await send<ProjectWithDetails>('POST', '/api/projects', {
+      title: 'Fester Preis',
+      price: 49.9,
+    });
+    expect(fixed.body).toMatchObject({ price: 49.9, priceAuto: false });
+    const both = await send<ProjectWithDetails>('POST', '/api/projects', {
+      title: 'Ausdrücklich automatisch',
+      price: 12,
+      priceAuto: true,
+    });
+    expect(both.body.priceAuto).toBe(true);
+  });
+});

@@ -65,6 +65,7 @@ const emptyDraft = (): Draft => ({
   price: null,
   printHours: null,
   markupPercent: 0,
+  priceAuto: true,
   showVatId: true,
   notes: null,
   members: [],
@@ -106,6 +107,13 @@ export function ProjectDetail({
   }, [saved]);
   const { data: printers = [] } = useList('printers');
   const costs = calcProjectCosts(draft, spools, printers);
+  // Automatischer Verkaufspreis: Gesamtkosten plus Aufschlag (ohne Kosten bleibt er leer)
+  const autoPrice = costs.total
+    ? Math.round(costs.total * (1 + (draft.markupPercent || 0) / 100) * 100) / 100
+    : null;
+  useEffect(() => {
+    if (draft.priceAuto && draft.price !== autoPrice) setDraft((d) => ({ ...d, price: autoPrice }));
+  }, [draft.priceAuto, draft.price, autoPrice]);
 
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
@@ -186,7 +194,7 @@ export function ProjectDetail({
       </div>
 
       <form onSubmit={submit}>
-        {tab === 'Allgemein' && <GeneralTab draft={draft} set={set} />}
+        {tab === 'Allgemein' && <GeneralTab draft={draft} set={set} costsTotal={costs.total} />}
         {tab === 'Team' && <TeamTab members={draft.members} onChange={(m) => set('members', m)} />}
         {tab === 'Material' && (
           <MaterialTab filaments={draft.filaments} onChange={(f) => set('filaments', f)} />
@@ -251,9 +259,12 @@ function Stat({
 function GeneralTab({
   draft,
   set,
+  costsTotal,
 }: {
   draft: Draft;
   set: <K extends keyof Draft>(k: K, v: Draft[K]) => void;
+  /** Gesamtkosten aus Material, Druckzeit und Zusatzkosten */
+  costsTotal: number;
 }) {
   const { data: customers = [] } = useList('customers');
   const { data: printers = [] } = useList('printers');
@@ -350,16 +361,31 @@ function GeneralTab({
           onChange={(e) => set('printHours', numOrNull(e.target.value))}
         />
       </Field>
-      <Field label="Verkaufspreis (€)">
-        <TextInput
-          type="number"
-          step="0.01"
-          min="0"
-          inputMode="decimal"
-          value={draft.price ?? ''}
-          onChange={(e) => set('price', numOrNull(e.target.value))}
-        />
-      </Field>
+      <div className="flex flex-col gap-1.5">
+        <Field label="Verkaufspreis (€)">
+          <NumberInput
+            min={0}
+            value={draft.price}
+            onChange={(v) => {
+              if (v === draft.price) return;
+              // Selbst eingetragener Preis beendet den Automatikbetrieb
+              set('price', v);
+              if (draft.priceAuto) set('priceAuto', false);
+            }}
+          />
+        </Field>
+        <label className="flex items-center gap-2 text-xs text-muted">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[var(--color-accent)]"
+            checked={draft.priceAuto}
+            onChange={(e) => set('priceAuto', e.target.checked)}
+          />
+          {draft.priceAuto
+            ? `Aus den Kosten: ${euro(costsTotal)}${draft.markupPercent ? ` + ${String(draft.markupPercent).replace('.', ',')} % Aufschlag` : ''}`
+            : 'Aus den Kosten berechnen'}
+        </label>
+      </div>
       <Field label="Aufschlag / Marge (%)">
         <TextInput
           type="number"

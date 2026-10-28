@@ -140,6 +140,9 @@ export function registerProjectRoutes(app: FastifyInstance, db: Db, uploadDir: s
     const missing = missingFields(data, ['title']);
     if (missing.length) return reply.code(400).send({ error: 'Titel fehlt' });
     const status = isStatus(data.status) ? data.status : 'open';
+    // Mitgeschickter Preis ohne Angabe zum Automatikbetrieb ist ein fester Preis
+    if (data.price !== undefined && data.price !== null && data.priceAuto === undefined)
+      data.priceAuto = false;
     const id = db.transaction((tx) => {
       const row = tx
         .insert(projects)
