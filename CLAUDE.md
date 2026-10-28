@@ -18,11 +18,16 @@ Requires Node 22+. On this Windows machine, PowerShell calls may need the PATH r
   - Stop the prod server.
   - Copy `server/data/3dapp.db` together with its `-wal` and `-shm` files into `server/data/backup/` (git-ignored). WAL mode keeps most of the data in the `-wal` file.
 
+Tooling on this machine:
+
+- There is no Python and no `gh` CLI. Use Node for scripts. CI status can only be seen on GitHub (Actions tab).
+- `core.autocrlf=true`, and the working tree mixes CRLF and LF files. Prettier writes LF, so it can make untouched files show up in `git status`. Check them with `git diff --ignore-cr-at-eol` and `git checkout` the ones without real changes. String replacements in scripts must handle `\r\n`.
+
 Env vars: `API_PORT` (default 3000; deliberately not `PORT`, which the preview tooling sets), `HOST`, `DATA_DIR` (default `server/data`: DB, uploads, certs, `client-log.jsonl`), `HTTPS=false` to disable TLS, `HA_POLL_MS` (default 20000; the e2e server uses 500), `TRUST_PROXY=true` behind a reverse proxy. `NODE_ENV=production` (set by `npm start`) makes the server serve `client/dist`.
 
 ## Deployment
 
-- In production the app runs as a Docker container on the user's home server (Portainer, stack in `docker-compose.yml`, host port 3100). Every push to `main` triggers `.github/workflows/docker.yml`: it runs only `typecheck` and `npm test`, then publishes `ghcr.io/<owner>/druckwerk:latest`. CI doesn't run the e2e suite, so run `npm run e2e` locally before pushing.
+- In production the app runs as a Docker container on the user's home server (Portainer, stack in `docker-compose.yml`, host port 3100). Every push to `main` triggers `.github/workflows/docker.yml`: it runs only `typecheck` and `npm test`, then publishes `ghcr.io/<owner>/druckwerk` tagged `latest`, the commit SHA and the version from `ha-app/config.yaml`. CI doesn't run the e2e suite, so run `npm run e2e` locally before pushing.
 - The Dockerfile's runtime stage copies only `shared/src`, `server/src`, `server/drizzle` and the built `client/dist`. A new runtime file outside those (e.g. a server-side fixture or asset) needs its own `COPY` line.
 - It sits behind Cloudflare Tunnel → Authentik proxy outpost (login with MFA). The container serves plain HTTP (`HTTPS=false`, `TRUST_PROXY=true`, data in `/data`).
 - The app has no auth of its own, so it must never be exposed without the proxy.
@@ -125,7 +130,7 @@ React 19, Vite 7, Tailwind v4 (tokens in `index.css`), React Router 7 and TanSta
 - Roadmap:
   - Done: phases 1 (core + Kanban), 2 (filament scan), 3 (invoice reading) and 4 (Home Assistant for the Bambu Lab P1S). Phase 4 covers live status, control, speed, skipping objects, AMS linking and import, automatic filament deduction and several HA locations.
   - Done since: several cameras per printer (HA entities or direct MJPEG URLs).
-  - Done since: Druckwerk as a Home Assistant App (see "Home Assistant App" below). Not yet tried on the user's real HA (HA OS VM on Proxmox, amd64).
+  - Done since: Druckwerk as a Home Assistant App (see "Home Assistant App" above). Not yet tried on the user's real HA (HA OS VM on Proxmox, amd64).
   - Done since: storage locations for spools (switchable) and quotes/invoices as PDF. The user is in Austria: tax wording follows the Austrian UStG (small business note `§ 6 Abs. 1 Z 27 UStG`, "UID-Nummer", 20 % standard rate).
   - Next, a Klipper printer (Artillery "SidewinderX1", via the `moonraker` integration in HA). Its HA entities couldn't be inspected yet because the printer was offline. Look at the real data first: Klipper skips objects via `EXCLUDE_OBJECT`, and the app's live status only understands `bambu_lab` so far.
 - The user's Home Assistant is reachable through the HA MCP tools in this environment. Use them (read-only) to look at real entity data, e.g. `ha_eval_template` with `BAMBU_TEMPLATE`. Never put the user's token anywhere; the user enters it in the app.
