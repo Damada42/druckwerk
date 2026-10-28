@@ -74,9 +74,17 @@ test('Angebot und Rechnung als PDF', async ({ page, request }, testInfo) => {
   await invoiceEditor.getByRole('button', { name: 'Rechnung erstellen' }).click();
   await expect(page.getByText(`Rechnung RE-${year}-001`)).toBeVisible();
 
-  // PDF lässt sich laden
-  const href = await page.getByRole('link', { name: 'PDF' }).first().getAttribute('href');
-  const pdf = await request.get(`/${href}`);
+  // PDF öffnet in der App (nicht in einem neuen Fenster, das hinter HA-Ingress keine Anmeldung hätte)
+  await page.getByRole('button', { name: 'PDF' }).first().click();
+  const viewer = page.getByRole('dialog', { name: `Rechnung RE-${year}-001.pdf` });
+  await expect(viewer.getByRole('img', { name: 'Seite 1 von 1' })).toBeVisible();
+  await expect(viewer.getByRole('link', { name: 'Herunterladen' })).toHaveAttribute(
+    'download',
+    `Rechnung RE-${year}-001.pdf`,
+  );
+  await viewer.getByRole('button', { name: 'Schließen' }).click();
+  const docs = await (await request.get(`/api/projects/${project.id}/documents`)).json();
+  const pdf = await request.get(docs[0].filePath);
   expect(pdf.headers()['content-type']).toContain('application/pdf');
   const body = await pdf.body();
   expect(body.subarray(0, 4).toString()).toBe('%PDF');
@@ -130,4 +138,74 @@ test('Aufschlag und UID-Nummer: Vorschlag aus dem Projekt, je Angebot änderbar'
   // Projektvorgaben bleiben unverändert
   const saved = await (await request.get(`/api/projects/${project.id}`)).json();
   expect(saved).toMatchObject({ markupPercent: 10, showVatId: false });
+});
+
+test('Zusatzkosten-Kategorie mit Einheit und Preis; Angebot listet alle Positionen auf', async ({
+  page,
+  request,
+}) => {
+  // Kategorie unter „Einstellungen“
+  await page.goto('/einstellungen');
+  await page.getByLabel('Neue Kategorie').fill('Versand');
+  await page.getByRole('button', { name: 'Hinzufügen' }).last().click();
+  const row = page.getByRole('listitem', { name: 'Kategorie Versand' });
+  await row.getByLabel('Versand: Einheit').fill('Paket');
+  await row.getByLabel('Versand: Einheit').blur();
+  await row.getByLabel('Versand: Standardpreis').fill('5,90');
+  await row.getByLabel('Versand: Standardpreis').blur();
+  await expect
+    .poll(async () =>
+      ((await (await request.get('/api/cost-categories')).json()) as { name: string }[]).find(
+        (c) => c.name === 'Versand',
+      ),
+    )
+    .toMatchObject({ unit: 'Paket', defaultPrice: 5.9 });
+
+  // Im Projekt: Kategorie wählen übernimmt Einheit und Preis
+  await page.goto('/projekte?neu=1');
+  const d = page.getByRole('dialog');
+  await d.getByLabel('Titel *').fill('Versandkarton-Test');
+  await d.getByLabel('Aufschlag / Marge (%)').fill('10');
+  await d.getByRole('button', { name: /^Zusatzkosten/ }).click();
+  await d.getByRole('button', { name: 'Position hinzufügen' }).click();
+  const cost = d.getByRole('group', { name: 'Zusatzkosten 1' });
+  await cost.getByLabel('Kategorie').selectOption({ label: 'Versand' });
+  await expect(cost.getByLabel('Einheit', { exact: true })).toHaveValue('Paket');
+  await expect(cost.getByLabel('Preis je Einheit €')).toHaveValue('5,9');
+  // Menge: alte Zahl löschen und neu tippen, ohne dass eine 0 hängen bleibt
+  await cost.getByLabel('Menge').fill('');
+  await cost.getByLabel('Menge').pressSequentially('2');
+  await expect(cost.getByLabel('Menge')).toHaveValue('2');
+  await d.getByRole('button', { name: 'Position hinzufügen' }).click();
+  const second = d.getByRole('group', { name: 'Zusatzkosten 2' });
+  await second.getByLabel('Kategorie').selectOption({ label: 'Sonstiges' });
+  await second.getByLabel('Beschreibung').fill('Nachbearbeitung');
+  // „0“ antippen und tippen ersetzt die Null statt „012“ zu ergeben
+  await second.getByLabel('Preis je Einheit €').click();
+  await page.keyboard.type('12');
+  await expect(second.getByLabel('Preis je Einheit €')).toHaveValue('12');
+
+  await d.getByRole('button', { name: 'Speichern' }).click();
+  await expect(d.getByRole('status')).toHaveText('Gespeichert');
+
+  // Angebot: alle Zusatzkosten als eigene Positionen, mit Aufschlag aus dem Projekt
+  await d.getByRole('button', { name: 'Angebot & Rechnung' }).click();
+  await d.getByRole('button', { name: 'Angebot erstellen' }).click();
+  const editor = d.getByRole('group', { name: 'Angebot erstellen' });
+  await expect(editor.getByLabel('Position 1 Beschreibung')).toHaveValue('Versand');
+  await expect(editor.getByLabel('Position 1 Menge')).toHaveValue('2');
+  await expect(editor.getByLabel('Position 1 Einheit')).toHaveValue('Paket');
+  await expect(editor.getByLabel('Position 1 Einzelpreis')).toHaveValue('5,9');
+  await expect(editor.getByLabel('Position 2 Beschreibung')).toHaveValue('Nachbearbeitung');
+  await expect(editor.getByLabel('Position 2 Aufschlag in Prozent')).toHaveValue('10');
+  // 2 × 6,49 + 13,20 = 26,18 €
+  await expect(editor.getByText('26,18 €').last()).toBeVisible();
+  // Umschalten auf eine Pauschalposition geht auch
+  await editor.getByRole('button', { name: 'Pauschal (Verkaufspreis)' }).click();
+  await expect(editor.getByLabel('Position 1 Beschreibung')).toHaveValue('Versandkarton-Test');
+  await expect(editor.getByLabel('Position 2 Beschreibung')).toHaveCount(0);
+  await editor.getByRole('button', { name: 'Aus Projektkosten' }).click();
+  await editor.getByLabel('Empfänger').fill('Max Muster\n4020 Linz');
+  await editor.getByRole('button', { name: 'Angebot erstellen' }).click();
+  await expect(d.getByText(/^Angebot AN-/).first()).toBeVisible();
 });

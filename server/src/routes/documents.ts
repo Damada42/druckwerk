@@ -52,6 +52,7 @@ function parseItems(raw: unknown): DocumentItem[] {
     .map((i) => ({
       description: String(i?.description ?? '').trim(),
       quantity: Number(i?.quantity),
+      unit: String(i?.unit ?? '').trim(),
       unitPrice: Number(i?.unitPrice),
       markupPercent: Number(i?.markupPercent ?? 0),
     }))

@@ -197,6 +197,21 @@ Rechnungen erscheinen zusätzlich unter „Rechnungen“ als Ausgang. Einmal ers
 - **UID-Nummer:** Ebenfalls unter „Allgemein“ als Haken vorgeben, ob die UID-Nummer aufs Dokument kommt;
   im Angebot bzw. in der Rechnung je Dokument umschaltbar.
 
+- **Alle Positionen:** Ein neues Angebot bzw. eine neue Rechnung listet die Projektkosten einzeln auf –
+  je Filament eine Materialposition, die Druckzeit mit dem Stundensatz des Druckers und alle
+  Zusatzkosten mit Menge und Einheit. Ohne Kosten gibt es wie bisher eine Pauschalposition aus Titel und
+  Verkaufspreis; mit „Aus Projektkosten“ und „Pauschal (Verkaufspreis)“ lässt sich umschalten.
+- **Dateien ansehen:** PDFs und Fotos öffnen in der App (auch in der Home-Assistant-App am Handy, wo ein
+  neues Fenster ohne Anmeldung nur „401 Unauthorized“ zeigen würde), mit Knopf „Herunterladen“.
+
+**Zusatzkosten-Kategorien:** Unter „Einstellungen“ erweiterbar (z.B. Versand, Verpackung,
+Nachbearbeitung), jeweils mit Einheit (Stück, Packung, Meter …) und optionalem Standardpreis. Im Projekt
+übernimmt die gewählte Kategorie Einheit und Preis als Vorschlag; beides bleibt je Position änderbar.
+Ohne Beschreibung steht auf dem Dokument der Kategoriename. Verwendete Kategorien lassen sich nicht löschen.
+
+**Projekt speichern:** Das Fenster bleibt nach dem Speichern offen und meldet „Gespeichert“ – so geht es
+gleich mit Angebot oder Rechnung weiter.
+
 **Sorte bearbeiten:** Hast du mehrere Spulen derselben Sorte (gleicher Typ, Farbe, Finish, Hersteller),
 ändert „Sorte bearbeiten“ in der aufgeklappten Gruppe Preis, Farbe, Hersteller, Finish, Durchmesser und
 Spulengewicht für alle auf einmal. Restmenge, Lagerplatz und Notizen bleiben je Spule.

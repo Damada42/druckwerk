@@ -18,24 +18,21 @@ export const PRIORITY_LABELS: Record<Priority, string> = {
   high: 'Hoch',
 };
 
-export const COST_CATEGORIES = [
-  'electronics',
-  'wood',
-  'metal',
-  'led',
-  'hardware',
-  'other',
-] as const;
-export type CostCategory = (typeof COST_CATEGORIES)[number];
+/** Kategorie für Zusatzkosten, unter „Einstellungen“ erweiterbar */
+export interface CostCategory {
+  id: number;
+  /** Fester Schlüssel, unter dem Projektpositionen die Kategorie speichern */
+  key: string;
+  name: string;
+  /** Vorschlag für neue Positionen, z.B. „Stück“, „Packung“, „Meter“ */
+  unit: string;
+  /** Vorschlag für den Stückpreis neuer Positionen */
+  defaultPrice: number | null;
+  position: number;
+}
 
-export const COST_CATEGORY_LABELS: Record<CostCategory, string> = {
-  electronics: 'Elektronik',
-  wood: 'Holz',
-  metal: 'Metall',
-  led: 'LEDs',
-  hardware: 'Schrauben & Kleinteile',
-  other: 'Sonstiges',
-};
+/** Vorschläge für Einheiten (frei eingebbar) */
+export const COST_UNITS = ['Stück', 'Packung', 'Meter', 'Stunde', 'kg', 'Liter', 'Pauschal'];
 
 export const INVOICE_TYPES = ['incoming', 'outgoing'] as const;
 export type InvoiceType = (typeof INVOICE_TYPES)[number];
@@ -206,9 +203,11 @@ export interface ProjectFilament {
 
 export interface ProjectCost {
   id: number;
-  category: CostCategory;
+  /** Schlüssel der Kategorie (CostCategory.key) */
+  category: string;
   description: string;
   quantity: number;
+  unit: string;
   unitPrice: number;
 }
 

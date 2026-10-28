@@ -12,6 +12,7 @@ import {
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CompanyCard } from '../components/CompanyCard';
+import { CostCategoriesCard } from '../components/CostCategoriesCard';
 import {
   useHaConnections,
   useHaStatus,
@@ -33,6 +34,7 @@ export function SettingsPage() {
         <NameList resource="filament-types" title="Filamenttypen" placeholder="z.B. PLA-CF" />
         <NameList resource="finishes" title="Art / Finish" placeholder="z.B. Seidenmatt" />
       </div>
+      <CostCategoriesCard />
       <CompanyCard />
       <StorageCard />
       <HomeAssistantCard />

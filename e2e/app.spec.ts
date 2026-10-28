@@ -138,7 +138,7 @@ test('Projekt mit Team, Material, Zusatzkosten anlegen und Kosten prüfen', asyn
   await d.getByRole('button', { name: /^Zusatzkosten/ }).click();
   await d.getByRole('button', { name: 'Position hinzufügen' }).click();
   await d.getByLabel('Beschreibung').fill('Arduino Nano');
-  await d.getByLabel('Stückpreis €').fill('8');
+  await d.getByLabel('Preis je Einheit €').fill('8');
 
   // 100 g × 0,02 €/g = 2,00 € · 3 h × 1,432 €/h = 4,30 € · Zusatz 8,00 € → 14,30 €, Gewinn 35,70 €
   await expect(d.getByText('Material', { exact: true }).locator('..')).toContainText('2,00');
@@ -146,7 +146,12 @@ test('Projekt mit Team, Material, Zusatzkosten anlegen und Kosten prüfen', asyn
   await expect(d.getByText('Kosten gesamt').locator('..')).toContainText('14,30');
   await expect(d.getByText('Gewinn').locator('..')).toContainText('35,70');
 
+  // Speichern lässt das Fenster offen und meldet es; ein neues Projekt bekommt seine Adresse
   await d.getByRole('button', { name: 'Speichern' }).click();
+  await expect(d.getByRole('status')).toHaveText('Gespeichert');
+  await expect(page).toHaveURL(/\/projekte\/\d+$/);
+  await expect(d.getByRole('heading', { name: 'Smarte Nachttischlampe' })).toBeVisible();
+  await d.getByRole('button', { name: 'Schließen', exact: true }).last().click();
   await expect(d).toBeHidden();
 
   const card = column(page, 'Offen').locator('article', { hasText: 'Smarte Nachttischlampe' });
@@ -199,8 +204,19 @@ test('Rechnung mit PDF hochladen', async ({ page, request }) => {
   const item = d.getByRole('listitem').filter({ hasText: 'Arduino bei Reichelt' });
   await expect(item).toContainText('Nr. RE-4711');
   await expect(item).toContainText('8,00');
-  const href = await item.getByRole('link').getAttribute('href');
-  const file = await request.get(href!);
+  // Anhang öffnet in der App
+  await item.getByRole('button', { name: 'Datei ansehen' }).click();
+  const viewer = page.getByRole('dialog', { name: 'rechnung.pdf' });
+  // Die Test-Datei ist nur ein PDF-Gerüst ohne Seiten: Hinweis statt Vorschau, Herunterladen geht
+  await expect(viewer.getByText(/keine Vorschau/)).toBeVisible();
+  await expect(viewer.getByRole('link', { name: 'Herunterladen' })).toBeVisible();
+  await viewer.getByRole('button', { name: 'Schließen' }).click();
+  const projects = (await (await request.get('/api/projects')).json()) as {
+    title: string;
+    invoices: { filePath: string }[];
+  }[];
+  const filePath = projects.find((p) => p.title === 'Smarte Nachttischlampe')!.invoices[0].filePath;
+  const file = await request.get(filePath);
   expect(file.status()).toBe(200);
   expect((await file.body()).subarray(0, 4).toString()).toBe('%PDF');
   await expect(d.getByRole('button', { name: 'Rechnungen (1)' })).toBeVisible();
@@ -211,7 +227,8 @@ test('Projekt löschen mit Rückfrage', async ({ page }) => {
   await page.getByRole('button', { name: 'Neues Projekt' }).click();
   await dialog(page).getByLabel('Titel *').fill('Wegwerf-Projekt');
   await dialog(page).getByRole('button', { name: 'Speichern' }).click();
-  await page.getByRole('heading', { name: 'Wegwerf-Projekt' }).click();
+  // Das Fenster bleibt nach dem Speichern offen, Löschen geht direkt
+  await expect(dialog(page).getByRole('status')).toHaveText('Gespeichert');
 
   page.once('dialog', (confirm) => confirm.accept());
   await dialog(page).getByRole('button', { name: 'Löschen' }).click();

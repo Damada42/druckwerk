@@ -26,6 +26,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, Plus, Printer as PrinterIcon, Search } from 'lucide-react';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -71,6 +72,7 @@ export function ProjectsPage() {
   const { id } = useParams();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: projects = [], isLoading } = useList('projects');
   const move = useMoveProject();
   const [query, setQuery] = useState('');
@@ -245,7 +247,19 @@ export function ProjectsPage() {
         </DndContext>
       )}
 
-      {(isNew || openProject) && <ProjectDetail project={openProject} onClose={closeDetail} />}
+      {(isNew || openProject) && (
+        <ProjectDetail
+          project={openProject}
+          onClose={closeDetail}
+          onCreated={(created) => {
+            // Sofort in die Liste, sonst schließt das Fenster kurz bis zum Neuladen
+            queryClient.setQueryData<ProjectWithDetails[]>(['projects'], (list) =>
+              list ? [...list.filter((p) => p.id !== created.id), created] : [created],
+            );
+            navigate(`/projekte/${created.id}`, { replace: true });
+          }}
+        />
+      )}
     </>
   );
 }

@@ -37,7 +37,8 @@ test('Handy: Projekt-Dialog passt auf den Bildschirm', async ({ page }) => {
   expect(box.width).toBeLessThanOrEqual(viewport.width);
   expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
   await expect(dialog.getByRole('button', { name: 'Speichern' })).toBeInViewport();
-  await dialog.getByRole('button', { name: 'Schließen' }).click();
+  // Oben das ✕, unten „Schließen“ – beide schließen
+  await dialog.getByRole('button', { name: 'Schließen' }).first().click();
   await expect(dialog).toBeHidden();
 });
 

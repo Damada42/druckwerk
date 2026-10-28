@@ -59,6 +59,8 @@ export const DOCUMENT_PREFIX: Record<DocumentKind, string> = { offer: 'AN', invo
 export interface DocumentItem {
   description: string;
   quantity: number;
+  /** Einheit der Menge, z.B. „Stück“, „Stunde“; fehlt bei älteren Dokumenten */
+  unit?: string;
   /** Einzelpreis netto (bei Kleinunternehmern = Endpreis), ohne Aufschlag */
   unitPrice: number;
   /** Aufschlag auf den Einzelpreis in Prozent; fehlt bei älteren Dokumenten */

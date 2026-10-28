@@ -9,7 +9,6 @@ import {
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import type {
-  CostCategory,
   DocumentItem,
   DocumentKind,
   InvoiceType,
@@ -175,10 +174,27 @@ export const projectCosts = sqliteTable('project_costs', {
   projectId: integer('project_id')
     .notNull()
     .references(() => projects.id, { onDelete: 'cascade' }),
-  category: text('category').$type<CostCategory>().notNull().default('other'),
+  /** Schlüssel einer Kategorie aus cost_categories */
+  category: text('category').notNull().default('other'),
   description: text('description').notNull(),
   quantity: real('quantity').notNull().default(1),
+  /** Einheit der Menge, z.B. „Stück“, „Packung“, „Meter“ */
+  unit: text('unit').notNull().default('Stück'),
   unitPrice: real('unit_price').notNull().default(0),
+});
+
+/**
+ * Kategorien für Zusatzkosten, unter „Einstellungen“ erweiterbar. Preis und Einheit sind
+ * Vorschläge für neue Positionen; im Projekt bleiben sie änderbar.
+ */
+export const costCategories = sqliteTable('cost_categories', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  /** Fester Schlüssel, unter dem Projektpositionen die Kategorie speichern */
+  key: text('key').notNull().unique(),
+  name: text('name').notNull(),
+  unit: text('unit').notNull().default('Stück'),
+  defaultPrice: real('default_price'),
+  position: real('position').notNull().default(0),
 });
 
 /** Verbindungen zu Home Assistant – eine pro Standort. Adresse und Token verlassen den Server nie. */

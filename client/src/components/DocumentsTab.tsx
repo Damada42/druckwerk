@@ -12,7 +12,9 @@ import { FileDown, FilePlus2, Plus, Receipt, Trash2, X } from 'lucide-react';
 import { useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useCompany, useDocuments, useList, useNextDocumentNumber } from '../api';
-import { appUrl } from '../base';
+import { UnitSuggestions } from './CostCategoriesCard';
+import { costItems, flatItem, str, type ItemDraft } from './documentItems';
+import { FileLink } from './FileViewer';
 import { Button, ErrorText, Field, TextArea, TextInput, cx, dateDe, euro } from './ui';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -22,7 +24,6 @@ const addDays = (iso: string, days: number) => {
   return d.toISOString().slice(0, 10);
 };
 const num = (v: string) => Number(v.replace(',', '.'));
-const str = (n: number) => String(n).replace('.', ',');
 
 const INTRO: Record<DocumentKind, string> = {
   offer: 'Gerne biete ich Folgendes an:',
@@ -43,16 +44,34 @@ export function DocumentsTab({ project }: { project: ProjectWithDetails }) {
   const [editor, setEditor] = useState<Editor | null>(null);
   const docs = list.data ?? [];
   const ready = !!company?.name && !!company.address;
+  // Für die Positionen aus den Projektkosten (Material, Druckzeit, Zusatzkosten)
+  const spools = useList('spools');
+  const types = useList('filament-types');
+  const finishes = useList('finishes');
+  const printers = useList('printers');
+  const categories = useList('cost-categories');
+  const lists = [spools, types, finishes, printers, categories];
 
-  if (editor && company)
+  if (editor && company) {
+    if (lists.some((l) => !l.data)) return <p className="text-sm text-muted">Lade…</p>;
+    const ctx = {
+      spools: spools.data!,
+      types: types.data!,
+      finishes: finishes.data!,
+      printers: printers.data!,
+      categories: categories.data!,
+    };
     return (
       <DocumentForm
         project={project}
         company={company}
         editor={editor}
+        fromCosts={costItems(project, ctx)}
+        flat={flatItem(project)}
         onDone={() => setEditor(null)}
       />
     );
+  }
 
   return (
     <div className="space-y-4" onKeyDown={noEnter}>
@@ -84,14 +103,13 @@ export function DocumentsTab({ project }: { project: ProjectWithDetails }) {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <a
-                    href={appUrl(d.filePath)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-accent hover:bg-surface-2"
+                  <FileLink
+                    path={d.filePath}
+                    name={`${label}.pdf`}
+                    className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-accent hover:bg-surface-2"
                   >
                     <FileDown size={16} /> PDF
-                  </a>
+                  </FileLink>
                   {d.kind === 'offer' && ready && (
                     <Button
                       variant="ghost"
@@ -135,14 +153,6 @@ export function DocumentsTab({ project }: { project: ProjectWithDetails }) {
   );
 }
 
-interface ItemDraft {
-  description: string;
-  quantity: string;
-  unitPrice: string;
-  /** Aufschlag in Prozent; Vorschlag aus dem Projekt, nur für dieses Dokument änderbar */
-  markup: string;
-}
-
 /** Leeres Feld = kein Aufschlag */
 const markupOf = (v: string) => (v.trim() ? num(v) : 0);
 
@@ -150,11 +160,16 @@ function DocumentForm({
   project,
   company,
   editor: { kind, from },
+  fromCosts,
+  flat,
   onDone,
 }: {
   project: ProjectWithDetails;
   company: CompanyProfile;
   editor: Editor;
+  /** Positionen aus den Projektkosten bzw. eine Pauschalposition zum Verkaufspreis */
+  fromCosts: ItemDraft[];
+  flat: ItemDraft[];
   onDone: () => void;
 }) {
   const { create } = useDocuments(project.id);
@@ -180,17 +195,14 @@ function DocumentForm({
       ? from.items.map((i) => ({
           description: i.description,
           quantity: str(i.quantity),
+          unit: i.unit ?? '',
           unitPrice: str(i.unitPrice),
           markup: i.markupPercent ? str(i.markupPercent) : '',
         }))
-      : [
-          {
-            description: project.title,
-            quantity: '1',
-            unitPrice: str(project.price ?? 0),
-            markup: defaultMarkup,
-          },
-        ],
+      : // Alle Kosten als einzelne Positionen; ohne Kosten wie bisher pauschal
+        fromCosts.length
+        ? fromCosts
+        : flat,
   );
 
   // Empfänger aus dem Kunden, sobald die Kundenliste geladen ist (bis von Hand geändert)
@@ -203,6 +215,7 @@ function DocumentForm({
   const parsed = items.map((i) => ({
     description: i.description.trim(),
     quantity: num(i.quantity),
+    unit: i.unit.trim(),
     unitPrice: num(i.unitPrice),
     markupPercent: markupOf(i.markup),
   }));
@@ -279,12 +292,34 @@ function DocumentForm({
       </div>
 
       <div>
-        <div className="mb-1.5 text-xs font-medium text-muted">
-          Positionen {company.smallBusiness ? '' : '(Preise netto)'}
+        <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-medium text-muted">
+            Positionen {company.smallBusiness ? '' : '(Preise netto)'}
+          </span>
+          {!from && fromCosts.length > 0 && (
+            <span className="flex gap-1 text-xs">
+              <Button
+                variant="ghost"
+                className="!px-2 !py-1 !text-xs"
+                onClick={() => setItems(fromCosts)}
+              >
+                Aus Projektkosten
+              </Button>
+              <Button
+                variant="ghost"
+                className="!px-2 !py-1 !text-xs"
+                onClick={() => setItems(flat)}
+              >
+                Pauschal (Verkaufspreis)
+              </Button>
+            </span>
+          )}
         </div>
-        <div className="mb-1 hidden grid-cols-[1fr_4.5rem_6.5rem_5rem_6rem_2rem] gap-2 px-2 text-xs text-muted sm:grid">
+        <UnitSuggestions id="document-units" />
+        <div className="mb-1 hidden grid-cols-[1fr_4rem_5.5rem_6rem_4.5rem_5.5rem_2rem] gap-2 px-2 text-xs text-muted sm:grid">
           <span>Beschreibung</span>
           <span>Menge</span>
+          <span>Einheit</span>
           <span>Einzelpreis</span>
           <span title="Aufschlag auf den Einzelpreis – steht nicht auf dem Dokument, nur im Preis">
             Aufschlag %
@@ -304,7 +339,7 @@ function DocumentForm({
             return (
               <li
                 key={i}
-                className="grid grid-cols-[1fr_auto] gap-2 rounded-lg border border-line p-2 sm:grid-cols-[1fr_4.5rem_6.5rem_5rem_6rem_2rem] sm:items-center"
+                className="grid grid-cols-[1fr_auto] gap-2 rounded-lg border border-line p-2 sm:grid-cols-[1fr_4rem_5.5rem_6rem_4.5rem_5.5rem_2rem] sm:items-center"
               >
                 <TextInput
                   aria-label={`Position ${i + 1} Beschreibung`}
@@ -320,6 +355,15 @@ function DocumentForm({
                       inputMode="decimal"
                       value={item.quantity}
                       onChange={(e) => setItem(i, { quantity: e.target.value })}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-[10px] text-muted sm:hidden">Einheit</span>
+                    <TextInput
+                      aria-label={`Position ${i + 1} Einheit`}
+                      list="document-units"
+                      value={item.unit}
+                      onChange={(e) => setItem(i, { unit: e.target.value })}
                     />
                   </label>
                   <label className="flex flex-col gap-0.5">
@@ -341,7 +385,7 @@ function DocumentForm({
                       onChange={(e) => setItem(i, { markup: e.target.value })}
                     />
                   </label>
-                  <span className="self-end pb-2 text-right text-sm tabular-nums sm:self-center sm:pb-0">
+                  <span className="col-span-4 text-right text-sm tabular-nums sm:col-span-1 sm:self-center">
                     {Number.isFinite(total) ? euro(total) : '–'}
                   </span>
                 </div>
@@ -364,7 +408,7 @@ function DocumentForm({
           onClick={() =>
             setItems((list) => [
               ...list,
-              { description: '', quantity: '1', unitPrice: '0', markup: defaultMarkup },
+              { description: '', quantity: '1', unit: '', unitPrice: '0', markup: defaultMarkup },
             ])
           }
         >

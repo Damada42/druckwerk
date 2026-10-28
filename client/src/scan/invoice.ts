@@ -1,9 +1,6 @@
-import * as pdfjs from 'pdfjs-dist';
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { pdfjs } from '../pdfjs';
 import { prepareImage, release } from './image';
 import { recognizeText } from './ocr';
-
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
 /** Rechnungen stehen auf den ersten Seiten; mehr zu lesen kostet nur Zeit */
 const MAX_PAGES = 3;

@@ -20,6 +20,7 @@ import { registerHaRoutes } from './routes/ha.js';
 import { registerCameraRoutes } from './routes/cameras.js';
 import { registerStorageRoutes } from './routes/storage.js';
 import { registerDocumentRoutes } from './routes/documents.js';
+import { registerCostCategoryRoutes } from './routes/costCategories.js';
 import { createHaClient } from './ha/client.js';
 import { createWatcher } from './ha/watcher.js';
 
@@ -223,6 +224,7 @@ export async function buildApp(options: AppOptions) {
       registerCameraRoutes(api, db, ha, options.haFetch);
       registerStorageRoutes(api, db);
       registerDocumentRoutes(api, db, options.uploadDir);
+      registerCostCategoryRoutes(api, db);
     },
     { prefix: '/api' },
   );

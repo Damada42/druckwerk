@@ -112,7 +112,8 @@ export function renderDocumentPdf(
   if (doc.intro) pdf.font('Helvetica').fontSize(10).text(doc.intro, { width: W }).moveDown(0.6);
 
   // Positionen
-  const cols = { pos: M, desc: M + 28, qty: M + W - 220, unit: M + W - 160, total: M + W - 80 };
+  // Menge mit Einheit („1,5 Stunde“) braucht etwas mehr Platz
+  const cols = { pos: M, desc: M + 28, qty: M + W - 255, unit: M + W - 160, total: M + W - 80 };
   const descW = cols.qty - cols.desc - 10;
   const bottomLimit = PAGE_H - BOTTOM;
   const header = () => {
@@ -120,7 +121,7 @@ export function renderDocumentPdf(
     pdf.font('Helvetica-Bold').fontSize(9).fillColor('black');
     pdf.text('Pos.', cols.pos, hy, { width: 26 });
     pdf.text('Beschreibung', cols.desc, hy, { width: descW });
-    pdf.text('Menge', cols.qty, hy, { width: 50, align: 'right' });
+    pdf.text('Menge', cols.qty, hy, { width: 85, align: 'right' });
     pdf.text(doc.smallBusiness ? 'Einzelpreis' : 'Einzelpreis netto', cols.unit - 20, hy, {
       width: 90,
       align: 'right',
@@ -148,7 +149,10 @@ export function renderDocumentPdf(
     const ry = pdf.y;
     pdf.fillColor('black');
     pdf.text(String(i + 1), cols.pos, ry, { width: 26 });
-    pdf.text(qty(item.quantity), cols.qty, ry, { width: 50, align: 'right' });
+    pdf.text([qty(item.quantity), item.unit].filter(Boolean).join(' '), cols.qty, ry, {
+      width: 85,
+      align: 'right',
+    });
     // Der Aufschlag steckt im Einzelpreis, der Kunde sieht ihn nicht als eigene Spalte
     const unit = itemUnitPrice(item);
     pdf.text(money(unit), cols.unit, ry, { width: 70, align: 'right' });

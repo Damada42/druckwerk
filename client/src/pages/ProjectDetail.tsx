@@ -1,6 +1,4 @@
 import {
-  COST_CATEGORIES,
-  COST_CATEGORY_LABELS,
   INVOICE_TYPES,
   INVOICE_TYPE_LABELS,
   MEMBER_ROLES,
@@ -18,11 +16,12 @@ import {
   type ProjectMember,
   type ProjectWithDetails,
 } from '@3dapp/shared';
-import { Camera, FileText, Paperclip, Plus, Trash2 } from 'lucide-react';
-import { useRef, useState, type FormEvent } from 'react';
+import { Camera, Check, FileText, Paperclip, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useInvoices, useList, useSave } from '../api';
-import { appUrl } from '../base';
 import { clientLog, errorInfo } from '../clientLog';
+import { FileLink } from '../components/FileViewer';
+import { UnitSuggestions } from '../components/CostCategoriesCard';
 import { DocumentsTab } from '../components/DocumentsTab';
 import {
   Avatar,
@@ -33,6 +32,7 @@ import {
   ErrorText,
   Field,
   Modal,
+  NumberInput,
   Select,
   TextArea,
   TextInput,
@@ -77,9 +77,12 @@ const numOrNull = (v: string) => (v === '' ? null : Number(v.replace(',', '.')))
 export function ProjectDetail({
   project,
   onClose,
+  onCreated,
 }: {
   project?: ProjectWithDetails;
   onClose: () => void;
+  /** Neues Projekt wurde zum ersten Mal gespeichert – Fenster bleibt offen und zeigt es an */
+  onCreated?: (project: ProjectWithDetails) => void;
 }) {
   const [tab, setTab] = useState<Tab>('Allgemein');
   const [draft, setDraft] = useState<Draft>(() =>
@@ -88,8 +91,19 @@ export function ProjectDetail({
   const { save, remove } = useSave('projects');
   const { data: spools = [] } = useList('spools');
 
-  const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
+  // Ungespeicherte Änderungen; nach dem Speichern kurz „Gespeichert“ anzeigen
+  const [dirty, setDirty] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => {
     setDraft((d) => ({ ...d, [key]: value }));
+    setDirty(true);
+    setSaved(false);
+  };
+  useEffect(() => {
+    if (!saved) return;
+    const t = setTimeout(() => setSaved(false), 4000);
+    return () => clearTimeout(t);
+  }, [saved]);
   const { data: printers = [] } = useList('printers');
   const costs = calcProjectCosts(draft, spools, printers);
 
@@ -99,7 +113,14 @@ export function ProjectDetail({
       setTab('Allgemein');
       return;
     }
-    save.mutate({ ...draft, id: project?.id } as never, { onSuccess: onClose });
+    // Fenster bleibt offen, damit man gleich weiterarbeiten (z.B. ein Angebot erstellen) kann
+    save.mutate({ ...draft, id: project?.id } as never, {
+      onSuccess: (row) => {
+        setDirty(false);
+        setSaved(true);
+        if (!project) onCreated?.(row as ProjectWithDetails);
+      },
+    });
   };
 
   const onDelete = () => {
@@ -117,16 +138,24 @@ export function ProjectDetail({
         <>
           {project && (
             <Button variant="danger" className="mr-auto" onClick={onDelete}>
-              <Trash2 size={16} /> Löschen
+              <Trash2 size={16} /> <span className="max-sm:sr-only">Löschen</span>
             </Button>
           )}
-          <Button onClick={onClose}>Abbrechen</Button>
+          {saved && (
+            <span
+              className="mr-1 inline-flex items-center gap-1 self-center text-sm font-medium text-emerald-600 dark:text-emerald-400"
+              role="status"
+            >
+              <Check size={16} /> <span className="max-sm:sr-only">Gespeichert</span>
+            </span>
+          )}
+          <Button onClick={onClose}>{dirty ? 'Abbrechen' : 'Schließen'}</Button>
           <Button
             variant="primary"
             onClick={() => submit()}
             disabled={save.isPending || !draft.title.trim()}
           >
-            Speichern
+            {save.isPending ? 'Speichere…' : 'Speichern'}
           </Button>
         </>
       }
@@ -478,21 +507,18 @@ function MaterialTab({
               )}
             </div>
             <Field label="Geplant (g)">
-              <TextInput
-                type="number"
-                min="0"
-                inputMode="decimal"
+              <NumberInput
+                min={0}
+                emptyValue={0}
                 value={f.plannedGrams}
-                onChange={(e) => update(i, { plannedGrams: Number(e.target.value) || 0 })}
+                onChange={(v) => update(i, { plannedGrams: v ?? 0 })}
               />
             </Field>
             <Field label="Verbraucht (g)">
-              <TextInput
-                type="number"
-                min="0"
-                inputMode="decimal"
-                value={f.usedGrams ?? ''}
-                onChange={(e) => update(i, { usedGrams: numOrNull(e.target.value) })}
+              <NumberInput
+                min={0}
+                value={f.usedGrams}
+                onChange={(v) => update(i, { usedGrams: v })}
               />
             </Field>
             <Button
@@ -538,57 +564,77 @@ function CostsTab({
   costs: Omit<ProjectCost, 'id'>[];
   onChange: (c: ProjectCost[]) => void;
 }) {
+  const { data: categories = [] } = useList('cost-categories');
   const update = (i: number, patch: Partial<ProjectCost>) =>
     onChange(costs.map((c, j) => (j === i ? { ...c, ...patch } : c)) as ProjectCost[]);
+  // Kategorie wählen übernimmt deren Einheit und Standardpreis als Vorschlag
+  const fromCategory = (key: string) => {
+    const cat = categories.find((c) => c.key === key);
+    return {
+      category: key,
+      unit: cat?.unit ?? 'Stück',
+      ...(cat?.defaultPrice != null ? { unitPrice: cat.defaultPrice } : {}),
+    };
+  };
+  const name = (key: string) => categories.find((c) => c.key === key)?.name ?? key;
+
   return (
     <div className="space-y-3">
+      <UnitSuggestions id="project-cost-units" />
       {costs.length === 0 && (
         <p className="text-sm text-muted">
-          Extra-Teile wie Elektronik, Holz, Metall oder LEDs hier erfassen.
+          Extra-Teile und Leistungen wie Elektronik, Versand oder Nachbearbeitung hier erfassen. Die
+          Kategorien mit Einheit und Standardpreis legst du unter „Einstellungen“ an.
         </p>
       )}
       {costs.map((c, i) => (
         <Card
           key={i}
-          className="grid grid-cols-2 items-end gap-3 p-3 sm:grid-cols-[140px_1fr_80px_100px_auto]"
+          className="grid grid-cols-2 items-end gap-3 p-3 sm:grid-cols-[150px_1fr_70px_90px_95px_auto]"
+          aria-label={`Zusatzkosten ${i + 1}`}
+          role="group"
         >
           <Field label="Kategorie">
-            <Select
-              value={c.category}
-              onChange={(e) => update(i, { category: e.target.value as ProjectCost['category'] })}
-            >
-              {COST_CATEGORIES.map((k) => (
-                <option key={k} value={k}>
-                  {COST_CATEGORY_LABELS[k]}
+            <Select value={c.category} onChange={(e) => update(i, fromCategory(e.target.value))}>
+              {categories.map((k) => (
+                <option key={k.key} value={k.key}>
+                  {k.name}
                 </option>
               ))}
+              {/* Gelöschte Kategorie in alten Projekten trotzdem anzeigen */}
+              {!categories.some((k) => k.key === c.category) && (
+                <option value={c.category}>{name(c.category)}</option>
+              )}
             </Select>
           </Field>
           <Field label="Beschreibung">
             <TextInput
               value={c.description}
-              placeholder="z.B. ESP32"
+              placeholder={name(c.category)}
               onChange={(e) => update(i, { description: e.target.value })}
             />
           </Field>
           <Field label="Menge">
-            <TextInput
-              type="number"
-              min="0"
-              step="any"
-              inputMode="decimal"
+            <NumberInput
+              min={0}
+              emptyValue={1}
               value={c.quantity}
-              onChange={(e) => update(i, { quantity: Number(e.target.value) || 0 })}
+              onChange={(v) => update(i, { quantity: v ?? 1 })}
             />
           </Field>
-          <Field label="Stückpreis €">
+          <Field label="Einheit">
             <TextInput
-              type="number"
-              min="0"
-              step="0.01"
-              inputMode="decimal"
+              list="project-cost-units"
+              value={c.unit}
+              onChange={(e) => update(i, { unit: e.target.value })}
+            />
+          </Field>
+          <Field label="Preis je Einheit €">
+            <NumberInput
+              min={0}
+              emptyValue={0}
               value={c.unitPrice}
-              onChange={(e) => update(i, { unitPrice: Number(e.target.value) || 0 })}
+              onChange={(v) => update(i, { unitPrice: v ?? 0 })}
             />
           </Field>
           <Button
@@ -604,17 +650,20 @@ function CostsTab({
         onClick={() =>
           onChange([
             ...costs,
-            { category: 'electronics', description: '', quantity: 1, unitPrice: 0 },
+            {
+              description: '',
+              quantity: 1,
+              unitPrice: 0,
+              ...fromCategory(categories[0]?.key ?? 'other'),
+            },
           ] as ProjectCost[])
         }
       >
         <Plus size={16} /> Position hinzufügen
       </Button>
-      {costs.some((c) => !c.description) && (
-        <p className="text-xs text-muted">
-          Positionen ohne Beschreibung werden beim Speichern ignoriert.
-        </p>
-      )}
+      <p className="text-xs text-muted">
+        Ohne Beschreibung steht auf Angebot und Rechnung der Name der Kategorie.
+      </p>
     </div>
   );
 }
@@ -745,15 +794,15 @@ function InvoicesTab({ project }: { project: ProjectWithDetails }) {
               </div>
               <span className="font-medium tabular-nums">{euro(inv.amount)}</span>
               {inv.filePath && (
-                <a
-                  href={appUrl(inv.filePath)}
-                  target="_blank"
-                  rel="noreferrer"
+                <FileLink
+                  path={inv.filePath}
+                  name={inv.fileName ?? 'Rechnung'}
+                  label="Datei ansehen"
                   className="text-accent hover:underline"
                   title={inv.fileName ?? ''}
                 >
                   <Paperclip size={16} />
-                </a>
+                </FileLink>
               )}
               <Button
                 variant="ghost"

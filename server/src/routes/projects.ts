@@ -12,8 +12,9 @@ interface DetailsBody {
   filaments?: { spoolId: number; plannedGrams?: number; usedGrams?: number | null }[];
   costs?: {
     category?: string;
-    description: string;
+    description?: string;
     quantity?: number;
+    unit?: string;
     unitPrice?: number;
   }[];
 }
@@ -48,6 +49,7 @@ export function loadProject(db: Db, id: number): ProjectWithDetails | undefined 
         category: projectCosts.category,
         description: projectCosts.description,
         quantity: projectCosts.quantity,
+        unit: projectCosts.unit,
         unitPrice: projectCosts.unitPrice,
       })
       .from(projectCosts)
@@ -102,13 +104,15 @@ function replaceDetails(db: Db, projectId: number, body: DetailsBody) {
   }
   if (Array.isArray(body.costs)) {
     db.delete(projectCosts).where(eq(projectCosts.projectId, projectId)).run();
+    // Ohne Beschreibung reicht die Kategorie (z.B. „Versand“); ganz leere Zeilen fallen weg
     const rows = body.costs
-      .filter((c) => c.description)
+      .filter((c) => c.description?.trim() || c.category)
       .map((c) => ({
         projectId,
-        category: (c.category ?? 'other') as never,
-        description: c.description,
-        quantity: Number(c.quantity) || 1,
+        category: c.category || 'other',
+        description: c.description?.trim() ?? '',
+        quantity: Number.isFinite(Number(c.quantity)) ? Number(c.quantity) : 1,
+        unit: c.unit?.trim() || 'Stück',
         unitPrice: Number(c.unitPrice) || 0,
       }));
     if (rows.length) db.insert(projectCosts).values(rows).run();

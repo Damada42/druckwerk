@@ -11,6 +11,7 @@ import {
 } from '@3dapp/shared';
 import type {
   BarcodeLookup,
+  CostCategory,
   SpoolBatchInput,
   Customer,
   DashboardStats,
@@ -98,6 +99,7 @@ export interface Resources {
   finishes: Finish;
   projects: ProjectWithDetails;
   'storage-locations': StorageLocation;
+  'cost-categories': CostCategory;
 }
 
 export type ResourceName = keyof Resources;

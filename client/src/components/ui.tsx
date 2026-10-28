@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { useEffect, useRef, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 
 export const euro = (n: number | null | undefined) =>
   n === null || n === undefined
@@ -67,6 +67,71 @@ export function Field({
 
 export function TextInput(props: ComponentProps<'input'>) {
   return <input {...props} className={cx(inputClass, props.className)} />;
+}
+
+const formatNumber = (n: number | null) => (n === null ? '' : String(n).replace('.', ','));
+
+/** „12,5“ oder „12.5“ → 12.5; leer/ungültig → null */
+export function parseNumber(text: string): number | null {
+  const cleaned = text.trim().replace(/\s/g, '').replace(',', '.');
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Zahlenfeld, in dem man frei tippen kann: Der Text bleibt beim Tippen wie eingegeben (auch leer
+ * oder „1,“), statt dass eine 0 stehen bleibt und „012“ entsteht. Gültige Werte gehen sofort an
+ * `onChange`; beim Verlassen wird auf eine gültige Zahl geprüft, sonst gilt `emptyValue`.
+ */
+export function NumberInput({
+  value,
+  onChange,
+  emptyValue = null,
+  min,
+  ...props
+}: Omit<ComponentProps<'input'>, 'value' | 'onChange' | 'type' | 'min'> & {
+  value: number | null;
+  onChange: (value: number | null) => void;
+  /** Wert, wenn das Feld leer bleibt (z.B. 0 bei Pflichtzahlen) */
+  emptyValue?: number | null;
+  min?: number;
+}) {
+  const [text, setText] = useState(() => formatNumber(value));
+  const focused = useRef(false);
+  // Von außen geänderte Werte übernehmen, aber nicht mitten im Tippen
+  useEffect(() => {
+    if (!focused.current) setText(formatNumber(value));
+  }, [value]);
+  const clamp = (n: number | null) => (n !== null && min !== undefined && n < min ? min : n);
+
+  return (
+    <TextInput
+      {...props}
+      type="text"
+      inputMode="decimal"
+      value={text}
+      onFocus={(e) => {
+        focused.current = true;
+        // „0“ antippen markiert sie, die erste Ziffer ersetzt sie
+        if (value === 0) e.currentTarget.select();
+        props.onFocus?.(e);
+      }}
+      onChange={(e) => {
+        setText(e.target.value);
+        const n = parseNumber(e.target.value);
+        if (n !== null) onChange(clamp(n));
+        else if (!e.target.value.trim()) onChange(emptyValue);
+      }}
+      onBlur={(e) => {
+        focused.current = false;
+        const n = clamp(parseNumber(text)) ?? emptyValue;
+        onChange(n);
+        setText(formatNumber(n));
+        props.onBlur?.(e);
+      }}
+    />
+  );
 }
 
 export function TextArea(props: ComponentProps<'textarea'>) {
