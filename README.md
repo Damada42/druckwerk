@@ -189,3 +189,14 @@ eingestellten Satz (Standard 20 %) netto/USt./brutto ausgewiesen. Im Projekt unt
 entsteht das PDF: Empfänger aus dem Kunden, erste Position aus Projekttitel und Preis, fortlaufende
 Nummern pro Jahr (AN-2026-001, RE-2026-001). Aus einem Angebot wird mit „Als Rechnung“ eine Rechnung.
 Rechnungen erscheinen zusätzlich unter „Rechnungen“ als Ausgang. Einmal erstellte PDFs bleiben unverändert.
+
+- **Aufschlag / Marge:** Im Projekt unter „Allgemein“ ein Prozentwert (z.B. 10 %), den jede Position eines
+  neuen Angebots bzw. einer Rechnung als Vorschlag bekommt. In der Spalte „Aufschlag %“ lässt er sich je
+  Position und Dokument ändern, ohne den Projektwert zu überschreiben. Auf dem PDF steht nur der
+  Einzelpreis inklusive Aufschlag – der Aufschlag selbst ist für den Kunden nicht sichtbar.
+- **UID-Nummer:** Ebenfalls unter „Allgemein“ als Haken vorgeben, ob die UID-Nummer aufs Dokument kommt;
+  im Angebot bzw. in der Rechnung je Dokument umschaltbar.
+
+**Sorte bearbeiten:** Hast du mehrere Spulen derselben Sorte (gleicher Typ, Farbe, Finish, Hersteller),
+ändert „Sorte bearbeiten“ in der aufgeklappten Gruppe Preis, Farbe, Hersteller, Finish, Durchmesser und
+Spulengewicht für alle auf einmal. Restmenge, Lagerplatz und Notizen bleiben je Spule.

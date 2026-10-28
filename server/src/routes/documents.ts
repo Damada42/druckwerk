@@ -53,11 +53,15 @@ function parseItems(raw: unknown): DocumentItem[] {
       description: String(i?.description ?? '').trim(),
       quantity: Number(i?.quantity),
       unitPrice: Number(i?.unitPrice),
+      markupPercent: Number(i?.markupPercent ?? 0),
     }))
     .filter((i) => i.description);
   if (!items.length) throw fail('Bitte mindestens eine Position mit Beschreibung eintragen.');
   if (items.some((i) => !Number.isFinite(i.quantity) || !Number.isFinite(i.unitPrice)))
     throw fail('Menge und Preis müssen Zahlen sein.');
+  // Negativ = Rabatt, aber nicht unter null
+  if (items.some((i) => !Number.isFinite(i.markupPercent) || i.markupPercent < -100))
+    throw fail('Der Aufschlag muss eine Zahl ab -100 % sein.');
   return items;
 }
 
@@ -168,6 +172,7 @@ export function registerDocumentRoutes(app: FastifyInstance, db: Db, uploadDir: 
         notes: String(body.notes ?? '').trim() || null,
         items,
         smallBusiness: company.smallBusiness,
+        showVatId: body.showVatId !== false,
         vatRate: company.smallBusiness ? 0 : company.vatRate,
         ...calcDocumentTotals(items, company.smallBusiness, company.vatRate),
       };

@@ -64,6 +64,8 @@ const emptyDraft = (): Draft => ({
   priority: 'normal',
   price: null,
   printHours: null,
+  markupPercent: 0,
+  showVatId: true,
   notes: null,
   members: [],
   filaments: [],
@@ -329,6 +331,30 @@ function GeneralTab({
           onChange={(e) => set('price', numOrNull(e.target.value))}
         />
       </Field>
+      <Field label="Aufschlag / Marge (%)">
+        <TextInput
+          type="number"
+          step="1"
+          min="-100"
+          inputMode="decimal"
+          placeholder="z.B. 10"
+          value={draft.markupPercent || ''}
+          onChange={(e) => set('markupPercent', numOrNull(e.target.value) ?? 0)}
+        />
+      </Field>
+      <label className="flex items-center gap-2 self-end pb-2 text-sm">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-[var(--color-accent)]"
+          checked={draft.showVatId}
+          onChange={(e) => set('showVatId', e.target.checked)}
+        />
+        UID-Nummer auf Angebot und Rechnung
+      </label>
+      <p className="-mt-2 text-xs text-muted sm:col-span-2">
+        Aufschlag und UID-Nummer sind Vorschläge für neue Angebote und Rechnungen – dort lassen sie
+        sich je Dokument ändern.
+      </p>
       <Field label="Notizen" className="sm:col-span-2">
         <TextArea
           value={draft.notes ?? ''}

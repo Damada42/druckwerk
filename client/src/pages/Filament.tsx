@@ -2,7 +2,7 @@ import { LOW_FILAMENT_GRAMS, storagePaths, storageTree, type FilamentSpool } fro
 import { ChevronDown, Copy, Minus, Pencil, Plus, ScanLine, Warehouse } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useConsume, useList, useSave, useSettings } from '../api';
+import { useConsume, useList, useSave, useSettings, useSpoolVariety } from '../api';
 import { EntityForm, type FieldDef } from '../components/EntityForm';
 import { ScanDialog, type ScanResult } from './ScanDialog';
 import { ScanSpoolForm } from './ScanSpoolForm';
@@ -22,6 +22,18 @@ import {
   grams,
 } from '../components/ui';
 
+/** Angaben, die alle Spulen einer Sorte teilen – wie auf dem Server (SPOOL_VARIETY_FIELDS) */
+const VARIETY_FIELDS = [
+  'typeId',
+  'manufacturer',
+  'colorName',
+  'colorHex',
+  'finishId',
+  'diameter',
+  'weightTotalG',
+  'price',
+];
+
 interface Group {
   key: string;
   colorName: string;
@@ -38,6 +50,8 @@ export function FilamentPage() {
   const { data: finishes = [] } = useList('finishes');
   const [typeFilter, setTypeFilter] = useState<number | null>(null);
   const [editing, setEditing] = useState<FilamentSpool | 'new' | null>(null);
+  const [variety, setVariety] = useState<Group | null>(null);
+  const updateVariety = useSpoolVariety();
   const [consuming, setConsuming] = useState<FilamentSpool | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [scan, setScan] = useState<'dialog' | ScanResult | null>(null);
@@ -224,6 +238,18 @@ export function FilamentPage() {
                     </button>
                     {isOpen && (
                       <ul className="space-y-2 bg-surface-2 px-4 py-3">
+                        {g.spools.length > 1 && (
+                          <li className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+                            <span>Preis, Farbe und Hersteller gelten meist für alle Spulen.</span>
+                            <Button
+                              variant="ghost"
+                              className="!px-2 !py-1"
+                              onClick={() => setVariety(g)}
+                            >
+                              <Pencil size={14} /> Sorte bearbeiten (alle {g.spools.length})
+                            </Button>
+                          </li>
+                        )}
                         {g.spools.map((s) => (
                           <SpoolRow
                             key={s.id}
@@ -258,6 +284,24 @@ export function FilamentPage() {
             finishId: finishes[0]?.id,
           }}
           onClose={() => setEditing(null)}
+        />
+      )}
+      {variety && (
+        <EntityForm
+          resource="spools"
+          title={`Sorte bearbeiten: ${variety.colorName}${variety.finish !== 'Normal' ? ` ${variety.finish}` : ''}`}
+          fields={fields.filter((f) => VARIETY_FIELDS.includes(f.key))}
+          initial={variety.spools[0]}
+          extra={
+            <p className="text-sm text-muted">
+              Gilt für alle {variety.spools.length} Spulen dieser Sorte. Restmenge, Lagerplatz und
+              Notizen bleiben je Spule.
+            </p>
+          }
+          onSave={(data) =>
+            updateVariety.mutateAsync({ ids: variety.spools.map((s) => s.id), data })
+          }
+          onClose={() => setVariety(null)}
         />
       )}
       {consuming && <ConsumeDialog spool={consuming} onClose={() => setConsuming(null)} />}

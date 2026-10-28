@@ -1,4 +1,5 @@
 import { Trash2 } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { useSave, type ResourceName, type Resources } from '../api';
 import { Button, ErrorText, Field, Modal, Select, TextArea, TextInput } from './ui';
@@ -26,6 +27,7 @@ export function EntityForm<R extends ResourceName>({
   defaults = {},
   onClose,
   extra,
+  onSave,
 }: {
   resource: R;
   title: string;
@@ -34,13 +36,18 @@ export function EntityForm<R extends ResourceName>({
   defaults?: Values;
   onClose: () => void;
   extra?: ReactNode;
+  /** Eigenes Speichern statt Anlegen/Ändern eines Datensatzes (z.B. mehrere Spulen auf einmal) */
+  onSave?: (data: Values) => Promise<unknown>;
 }) {
   const [values, setValues] = useState<Values>(() => ({
     ...defaults,
     ...(initial as Values | undefined),
   }));
   const { save, remove } = useSave(resource);
-  const id = (initial as { id?: number } | undefined)?.id;
+  const custom = useMutation({ mutationFn: (data: Values) => onSave!(data), onSuccess: onClose });
+  // Mit eigenem Speichern gibt es keinen einzelnen Datensatz zum Löschen
+  const id = onSave ? undefined : (initial as { id?: number } | undefined)?.id;
+  const pending = save.isPending || custom.isPending;
   const missing = fields.some(
     (f) =>
       f.required && (values[f.key] === undefined || values[f.key] === null || values[f.key] === ''),
@@ -60,7 +67,8 @@ export function EntityForm<R extends ResourceName>({
           ? Number(String(v).replace(',', '.'))
           : (v ?? null);
     }
-    save.mutate({ ...data, id } as never, { onSuccess: onClose });
+    if (onSave) custom.mutate(data);
+    else save.mutate({ ...data, id } as never, { onSuccess: onClose });
   };
 
   const onDelete = () => {
@@ -79,7 +87,7 @@ export function EntityForm<R extends ResourceName>({
             </Button>
           )}
           <Button onClick={onClose}>Abbrechen</Button>
-          <Button variant="primary" onClick={submit} disabled={missing || save.isPending}>
+          <Button variant="primary" onClick={submit} disabled={missing || pending}>
             Speichern
           </Button>
         </>
@@ -164,7 +172,7 @@ export function EntityForm<R extends ResourceName>({
         {extra && <div className="sm:col-span-2">{extra}</div>}
         <button type="submit" hidden />
       </form>
-      <ErrorText error={save.error ?? remove.error} />
+      <ErrorText error={custom.error ?? save.error ?? remove.error} />
     </Modal>
   );
 }

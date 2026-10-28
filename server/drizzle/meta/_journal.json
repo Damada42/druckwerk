@@ -71,6 +71,13 @@
       "when": 1793209660851,
       "tag": "0009_project_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793221662751,
+      "tag": "0010_markup_vat_id",
+      "breakpoints": true
     }
   ]
 }

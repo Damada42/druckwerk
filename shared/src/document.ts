@@ -59,8 +59,18 @@ export const DOCUMENT_PREFIX: Record<DocumentKind, string> = { offer: 'AN', invo
 export interface DocumentItem {
   description: string;
   quantity: number;
-  /** Einzelpreis netto (bei Kleinunternehmern = Endpreis) */
+  /** Einzelpreis netto (bei Kleinunternehmern = Endpreis), ohne Aufschlag */
   unitPrice: number;
+  /** Aufschlag auf den Einzelpreis in Prozent; fehlt bei älteren Dokumenten */
+  markupPercent?: number;
+}
+
+/**
+ * Einzelpreis mit Aufschlag, auf Cent gerundet – so steht er auf dem Dokument. Der Kunde sieht
+ * nur diesen Preis, den Aufschlag selbst nicht.
+ */
+export function itemUnitPrice(item: DocumentItem): number {
+  return round2(item.unitPrice * (1 + (item.markupPercent ?? 0) / 100));
 }
 
 export interface DocumentTotals {
@@ -85,6 +95,8 @@ export interface ProjectDocument extends DocumentTotals {
   notes: string | null;
   items: DocumentItem[];
   smallBusiness: boolean;
+  /** Eigene UID-Nummer steht auf dem Dokument */
+  showVatId: boolean;
   vatRate: number;
   filePath: string;
   /** Zugehöriger Eintrag unter „Rechnungen“ (nur bei Rechnungen) */
@@ -98,9 +110,13 @@ export type DocumentInput = Pick<
 > & {
   /** Leer = nächste freie Nummer */
   number?: string;
+  /** Ohne Angabe: UID-Nummer drucken (sofern in den Firmendaten eingetragen) */
+  showVatId?: boolean;
 };
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
 
 /** Netto, Umsatzsteuer und Brutto; Kleinunternehmer zahlen keine Umsatzsteuer */
 export function calcDocumentTotals(
@@ -108,7 +124,7 @@ export function calcDocumentTotals(
   smallBusiness: boolean,
   vatRate: number,
 ): DocumentTotals {
-  const net = round2(items.reduce((sum, i) => sum + round2(i.quantity * i.unitPrice), 0));
+  const net = round2(items.reduce((sum, i) => sum + round2(i.quantity * itemUnitPrice(i)), 0));
   const vat = smallBusiness ? 0 : round2((net * vatRate) / 100);
   return { net, vat, gross: round2(net + vat) };
 }

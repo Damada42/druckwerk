@@ -2,6 +2,7 @@ import {
   DOCUMENT_KIND_LABELS,
   SMALL_BUSINESS_NOTE,
   calcDocumentTotals,
+  itemUnitPrice,
   type CompanyProfile,
   type DocumentKind,
   type ProjectDocument,
@@ -138,7 +139,12 @@ interface ItemDraft {
   description: string;
   quantity: string;
   unitPrice: string;
+  /** Aufschlag in Prozent; Vorschlag aus dem Projekt, nur für dieses Dokument änderbar */
+  markup: string;
 }
+
+/** Leeres Feld = kein Aufschlag */
+const markupOf = (v: string) => (v.trim() ? num(v) : 0);
 
 function DocumentForm({
   project,
@@ -166,14 +172,25 @@ function DocumentForm({
   const [recipient, setRecipient] = useState<string | null>(from?.recipient ?? null);
   const [intro, setIntro] = useState(INTRO[kind]);
   const [notes, setNotes] = useState(from?.notes ?? '');
+  // Vorschläge aus dem Projekt („Allgemein“); Änderungen hier gelten nur für dieses Dokument
+  const defaultMarkup = project.markupPercent ? str(project.markupPercent) : '';
+  const [showVatId, setShowVatId] = useState(from?.showVatId ?? project.showVatId);
   const [items, setItems] = useState<ItemDraft[]>(() =>
     from
       ? from.items.map((i) => ({
           description: i.description,
           quantity: str(i.quantity),
           unitPrice: str(i.unitPrice),
+          markup: i.markupPercent ? str(i.markupPercent) : '',
         }))
-      : [{ description: project.title, quantity: '1', unitPrice: str(project.price ?? 0) }],
+      : [
+          {
+            description: project.title,
+            quantity: '1',
+            unitPrice: str(project.price ?? 0),
+            markup: defaultMarkup,
+          },
+        ],
   );
 
   // Empfänger aus dem Kunden, sobald die Kundenliste geladen ist (bis von Hand geändert)
@@ -187,9 +204,10 @@ function DocumentForm({
     description: i.description.trim(),
     quantity: num(i.quantity),
     unitPrice: num(i.unitPrice),
+    markupPercent: markupOf(i.markup),
   }));
   const totals = calcDocumentTotals(
-    parsed.filter((i) => i.description && Number.isFinite(i.quantity * i.unitPrice)),
+    parsed.filter((i) => i.description && Number.isFinite(i.quantity * itemUnitPrice(i))),
     company.smallBusiness,
     company.vatRate,
   );
@@ -208,6 +226,7 @@ function DocumentForm({
         intro,
         notes,
         items: parsed,
+        showVatId,
       },
       { onSuccess: onDone },
     );
@@ -263,19 +282,29 @@ function DocumentForm({
         <div className="mb-1.5 text-xs font-medium text-muted">
           Positionen {company.smallBusiness ? '' : '(Preise netto)'}
         </div>
-        <div className="mb-1 hidden grid-cols-[1fr_5rem_7rem_6rem_2rem] gap-2 px-2 text-xs text-muted sm:grid">
+        <div className="mb-1 hidden grid-cols-[1fr_4.5rem_6.5rem_5rem_6rem_2rem] gap-2 px-2 text-xs text-muted sm:grid">
           <span>Beschreibung</span>
           <span>Menge</span>
           <span>Einzelpreis</span>
+          <span title="Aufschlag auf den Einzelpreis – steht nicht auf dem Dokument, nur im Preis">
+            Aufschlag %
+          </span>
           <span className="text-right">Gesamt</span>
         </div>
         <ul className="space-y-2">
           {items.map((item, i) => {
-            const total = num(item.quantity) * num(item.unitPrice);
+            const total =
+              num(item.quantity) *
+              itemUnitPrice({
+                description: '',
+                quantity: 1,
+                unitPrice: num(item.unitPrice),
+                markupPercent: markupOf(item.markup),
+              });
             return (
               <li
                 key={i}
-                className="grid grid-cols-[1fr_auto] gap-2 rounded-lg border border-line p-2 sm:grid-cols-[1fr_5rem_7rem_6rem_2rem] sm:items-center"
+                className="grid grid-cols-[1fr_auto] gap-2 rounded-lg border border-line p-2 sm:grid-cols-[1fr_4.5rem_6.5rem_5rem_6rem_2rem] sm:items-center"
               >
                 <TextInput
                   aria-label={`Position ${i + 1} Beschreibung`}
@@ -283,7 +312,7 @@ function DocumentForm({
                   placeholder="Beschreibung"
                   onChange={(e) => setItem(i, { description: e.target.value })}
                 />
-                <div className="col-span-2 grid grid-cols-3 gap-2 sm:contents">
+                <div className="col-span-2 grid grid-cols-4 gap-2 sm:contents">
                   <label className="flex flex-col gap-0.5">
                     <span className="text-[10px] text-muted sm:hidden">Menge</span>
                     <TextInput
@@ -300,6 +329,16 @@ function DocumentForm({
                       inputMode="decimal"
                       value={item.unitPrice}
                       onChange={(e) => setItem(i, { unitPrice: e.target.value })}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-[10px] text-muted sm:hidden">Aufschlag %</span>
+                    <TextInput
+                      aria-label={`Position ${i + 1} Aufschlag in Prozent`}
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={item.markup}
+                      onChange={(e) => setItem(i, { markup: e.target.value })}
                     />
                   </label>
                   <span className="self-end pb-2 text-right text-sm tabular-nums sm:self-center sm:pb-0">
@@ -323,7 +362,10 @@ function DocumentForm({
           variant="ghost"
           className="mt-2"
           onClick={() =>
-            setItems((list) => [...list, { description: '', quantity: '1', unitPrice: '0' }])
+            setItems((list) => [
+              ...list,
+              { description: '', quantity: '1', unitPrice: '0', markup: defaultMarkup },
+            ])
           }
         >
           <Plus size={16} /> Position
@@ -340,6 +382,17 @@ function DocumentForm({
         <Row label="Gesamtbetrag" value={euro(totals.gross)} strong />
       </div>
       {company.smallBusiness && <p className="text-sm text-muted">{SMALL_BUSINESS_NOTE}</p>}
+      {company.vatId && (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[var(--color-accent)]"
+            checked={showVatId}
+            onChange={(e) => setShowVatId(e.target.checked)}
+          />
+          UID-Nummer ({company.vatId}) auf {kind === 'invoice' ? 'die Rechnung' : 'das Angebot'}
+        </label>
+      )}
 
       <Field label="Schlusstext (optional)">
         <TextArea

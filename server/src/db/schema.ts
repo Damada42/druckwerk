@@ -135,6 +135,10 @@ export const projects = sqliteTable('projects', {
   priority: text('priority').$type<Priority>().notNull().default('normal'),
   price: real('price'),
   printHours: real('print_hours'),
+  /** Vorschlag für Angebot/Rechnung: Aufschlag auf jeden Einzelpreis in Prozent */
+  markupPercent: real('markup_percent').notNull().default(0),
+  /** Vorschlag für Angebot/Rechnung: eigene UID-Nummer aufs Dokument drucken */
+  showVatId: integer('show_vat_id', { mode: 'boolean' }).notNull().default(true),
   notes: text('notes'),
   createdAt: createdAt(),
   updatedAt: createdAt().$onUpdate(() => new Date().toISOString().slice(0, 19) + 'Z'),
@@ -271,6 +275,8 @@ export const projectDocuments = sqliteTable('project_documents', {
   notes: text('notes'),
   items: text('items', { mode: 'json' }).$type<DocumentItem[]>().notNull(),
   smallBusiness: integer('small_business', { mode: 'boolean' }).notNull(),
+  /** UID-Nummer stand auf diesem Dokument */
+  showVatId: integer('show_vat_id', { mode: 'boolean' }).notNull().default(true),
   vatRate: real('vat_rate').notNull(),
   net: real('net').notNull(),
   vat: real('vat').notNull(),

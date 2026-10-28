@@ -1,6 +1,6 @@
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import { eq } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import Fastify, {
   type FastifyError,
   type FastifyInstance,
@@ -10,7 +10,7 @@ import Fastify, {
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createDb, schema } from './db/index.js';
-import { parseId, registerCrud } from './routes/crud.js';
+import { missingFields, parseId, pickColumns, registerCrud } from './routes/crud.js';
 import { registerInvoiceRoutes } from './routes/invoices.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerScanRoutes } from './routes/scan.js';
@@ -22,6 +22,18 @@ import { registerStorageRoutes } from './routes/storage.js';
 import { registerDocumentRoutes } from './routes/documents.js';
 import { createHaClient } from './ha/client.js';
 import { createWatcher } from './ha/watcher.js';
+
+/** Angaben, die alle Spulen einer Sorte teilen (Restmenge, Lagerort, Notizen bleiben je Spule) */
+const SPOOL_VARIETY_FIELDS = new Set([
+  'typeId',
+  'manufacturer',
+  'colorName',
+  'colorHex',
+  'finishId',
+  'diameter',
+  'weightTotalG',
+  'price',
+]);
 
 export interface AppOptions {
   /** Pfad zur SQLite-Datei oder ':memory:' für Tests. */
@@ -161,6 +173,41 @@ export async function buildApp(options: AppOptions) {
             .where(eq(schema.filamentSpools.id, id))
             .returning()
             .get();
+        },
+      );
+
+      /**
+       * Eine Sorte auf einmal ändern: gemeinsame Angaben (Preis, Farbe, Hersteller …) für mehrere
+       * Spulen. Restmenge, Lagerort und Notizen bleiben je Spule.
+       */
+      api.post<{ Body: { ids?: number[]; data?: Record<string, unknown> } }>(
+        '/spools/bulk-update',
+        (req, reply) => {
+          const ids = [...new Set((req.body?.ids ?? []).map(Number))].filter(Number.isInteger);
+          if (!ids.length) return reply.code(400).send({ error: 'Keine Spulen gewählt' });
+          const data = Object.fromEntries(
+            Object.entries(pickColumns(schema.filamentSpools, req.body?.data)).filter(([key]) =>
+              SPOOL_VARIETY_FIELDS.has(key),
+            ),
+          );
+          if (!Object.keys(data).length) return reply.code(400).send({ error: 'Nichts zu ändern' });
+          const missing = missingFields(data, ['typeId', 'manufacturer', 'colorName']).filter(
+            (f) => f in data,
+          );
+          if (missing.length)
+            return reply.code(400).send({ error: `Pflichtfelder fehlen: ${missing.join(', ')}` });
+          return db.transaction((tx) => {
+            const where = inArray(schema.filamentSpools.id, ids);
+            tx.update(schema.filamentSpools).set(data).where(where).run();
+            // Kleineres Spulengewicht: Restmenge darf nicht darüber liegen
+            tx.update(schema.filamentSpools)
+              .set({
+                weightRemainingG: sql`min(${schema.filamentSpools.weightRemainingG}, ${schema.filamentSpools.weightTotalG})`,
+              })
+              .where(where)
+              .run();
+            return tx.select().from(schema.filamentSpools).where(where).all();
+          });
         },
       );
 

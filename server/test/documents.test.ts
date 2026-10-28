@@ -1,6 +1,7 @@
 import {
   SMALL_BUSINESS_NOTE,
   calcDocumentTotals,
+  itemUnitPrice,
   nextDocumentNumber,
   type ProjectDocument,
 } from '@3dapp/shared';
@@ -41,6 +42,11 @@ async function pdfText(filePath: string) {
   return text;
 }
 
+/** Wie im PDF: österreichisches Format, z.B. „€ 22,00“ */
+// Im PDF-Text wird das geschützte Leerzeichen nach dem €-Zeichen zu einem normalen
+const eur = (n: number) =>
+  n.toLocaleString('de-AT', { style: 'currency', currency: 'EUR' }).replace(/\u00a0/g, ' ');
+
 const company = {
   name: '3D-Druck Muster',
   address: 'Hauptstraße 1\n4020 Linz',
@@ -71,6 +77,16 @@ describe('Rechenregeln', () => {
     const items = [{ description: 'A', quantity: 3, unitPrice: 10.1 }];
     expect(calcDocumentTotals(items, true, 20)).toEqual({ net: 30.3, vat: 0, gross: 30.3 });
     expect(calcDocumentTotals(items, false, 20)).toEqual({ net: 30.3, vat: 6.06, gross: 36.36 });
+  });
+
+  it('rechnet den Aufschlag in den Einzelpreis ein (auf Cent gerundet)', () => {
+    expect(
+      itemUnitPrice({ description: 'A', quantity: 1, unitPrice: 33.08, markupPercent: 10 }),
+    ).toBe(36.39);
+    // Ältere Dokumente ohne Aufschlag bleiben unverändert
+    expect(itemUnitPrice({ description: 'A', quantity: 1, unitPrice: 12.5 })).toBe(12.5);
+    const items = [{ description: 'A', quantity: 3, unitPrice: 10, markupPercent: 10 }];
+    expect(calcDocumentTotals(items, false, 20)).toEqual({ net: 33, vat: 6.6, gross: 39.6 });
   });
 
   it('zählt Nummern pro Art und Jahr weiter', () => {
@@ -149,6 +165,47 @@ describe('Angebote und Rechnungen', () => {
     const del = await app.inject({ method: 'DELETE', url: `/api/documents/${res.body.id}` });
     expect(del.statusCode).toBe(204);
     expect(existsSync(path.join(uploadDir, path.basename(res.body.filePath)))).toBe(false);
+  });
+
+  it('Aufschlag und UID-Nummer pro Dokument: im PDF nur der Endpreis, UID abschaltbar', async () => {
+    await send('PUT', '/api/company', { ...company, vatId: 'ATU12345678' });
+    const id = await project();
+    // Projektvorgaben werden gespeichert (die Vorschläge im Formular kommen von dort)
+    const saved = await send<{ markupPercent: number; showVatId: boolean }>(
+      'PUT',
+      `/api/projects/${id}`,
+      { title: 'Wetterstation', markupPercent: 10, showVatId: false },
+    );
+    expect(saved.body).toMatchObject({ markupPercent: 10, showVatId: false });
+
+    const res = await send<ProjectDocument>('POST', `/api/projects/${id}/documents`, {
+      ...offer,
+      showVatId: false,
+      items: [
+        { description: 'Gehäuse', quantity: 2, unitPrice: 20, markupPercent: 10 },
+        { description: 'Konstruktion', quantity: 1, unitPrice: 40, markupPercent: 0 },
+      ],
+    });
+    expect(res.status).toBe(201);
+    // 2 × 22,00 + 40,00
+    expect(res.body).toMatchObject({ gross: 84, showVatId: false });
+    expect(res.body.items[0]).toMatchObject({ unitPrice: 20, markupPercent: 10 });
+    const text = await pdfText(res.body.filePath);
+    expect(text).toContain(eur(22));
+    expect(text).toContain(eur(44));
+    expect(text).not.toContain(eur(20));
+    expect(text).not.toContain('ATU12345678');
+
+    // Ohne Angabe steht die UID wie bisher drauf
+    const withUid = await send<ProjectDocument>('POST', `/api/projects/${id}/documents`, offer);
+    expect(withUid.body.showVatId).toBe(true);
+    expect(await pdfText(withUid.body.filePath)).toContain('ATU12345678');
+
+    const bad = await send('POST', `/api/projects/${id}/documents`, {
+      ...offer,
+      items: [{ description: 'X', quantity: 1, unitPrice: 10, markupPercent: -150 }],
+    });
+    expect(bad.status).toBe(400);
   });
 
   it('bricht lange Positionslisten auf mehrere Seiten um', async () => {

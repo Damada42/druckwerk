@@ -441,6 +441,21 @@ export function useBookings(printerId: number) {
   return { list, undo };
 }
 
+/** Gemeinsame Angaben einer Sorte (Preis, Farbe …) für mehrere Spulen auf einmal ändern */
+export function useSpoolVariety() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, data }: { ids: number[]; data: Record<string, unknown> }) =>
+      api.post<FilamentSpool[]>('/spools/bulk-update', { ids, data }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['spools'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+      // Filamentkosten der Projekte hängen am Spulenpreis
+      qc.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+}
+
 export function useConsume() {
   const qc = useQueryClient();
   return useMutation({

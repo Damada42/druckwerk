@@ -87,3 +87,47 @@ test('Angebot und Rechnung als PDF', async ({ page, request }, testInfo) => {
   await expect(page.getByText(`Rechnung RE-${year}-001`)).toBeVisible();
   await expect(page.getByText('109,90 €')).toBeVisible();
 });
+
+test('Aufschlag und UID-Nummer: Vorschlag aus dem Projekt, je Angebot änderbar', async ({
+  page,
+  request,
+}) => {
+  await request.put('/api/company', { data: { vatId: 'ATU12345678' } });
+  const project = await (
+    await request.post('/api/projects', {
+      data: { title: 'Lampenschirm', price: 20, markupPercent: 10, showVatId: false },
+    })
+  ).json();
+
+  // Vorgaben unter „Allgemein“
+  await page.goto(`/projekte/${project.id}`);
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('Aufschlag / Marge (%)')).toHaveValue('10');
+  await expect(dialog.getByLabel('UID-Nummer auf Angebot und Rechnung')).not.toBeChecked();
+
+  // Im Angebot vorgeschlagen, dort nur für dieses Dokument geändert
+  await dialog.getByRole('button', { name: 'Angebot & Rechnung' }).click();
+  await dialog.getByRole('button', { name: 'Angebot erstellen' }).click();
+  const editor = dialog.getByRole('group', { name: 'Angebot erstellen' });
+  await expect(editor.getByLabel('Position 1 Aufschlag in Prozent')).toHaveValue('10');
+  await expect(editor.getByText('22,00 €').first()).toBeVisible();
+  await editor.getByLabel('Position 1 Aufschlag in Prozent').fill('25');
+  await expect(editor.getByText('25,00 €').first()).toBeVisible();
+  const uid = editor.getByLabel(/UID-Nummer \(ATU12345678\)/);
+  await expect(uid).not.toBeChecked();
+  await uid.check();
+  // Neue Position bekommt wieder den Projektwert
+  await editor.getByRole('button', { name: 'Position', exact: true }).click();
+  await expect(editor.getByLabel('Position 2 Aufschlag in Prozent')).toHaveValue('10');
+  await editor.getByRole('button', { name: 'Position 2 entfernen' }).click();
+  await editor.getByLabel('Empfänger').fill('Max Muster\n4020 Linz');
+  await editor.getByRole('button', { name: 'Angebot erstellen' }).click();
+  await expect(dialog.getByText(/^Angebot AN-/).first()).toBeVisible();
+
+  const docs = await (await request.get(`/api/projects/${project.id}/documents`)).json();
+  expect(docs[0]).toMatchObject({ showVatId: true, gross: 25 });
+  expect(docs[0].items[0]).toMatchObject({ unitPrice: 20, markupPercent: 25 });
+  // Projektvorgaben bleiben unverändert
+  const saved = await (await request.get(`/api/projects/${project.id}`)).json();
+  expect(saved).toMatchObject({ markupPercent: 10, showVatId: false });
+});

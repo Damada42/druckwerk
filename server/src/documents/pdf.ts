@@ -1,6 +1,7 @@
 import {
   DOCUMENT_KIND_LABELS,
   SMALL_BUSINESS_NOTE,
+  itemUnitPrice,
   type CompanyProfile,
   type ProjectDocument,
 } from '@3dapp/shared';
@@ -94,7 +95,7 @@ export function renderDocumentPdf(
     info.push(['Leistungsdatum', date(doc.serviceDate)]);
   if (doc.dueDate)
     info.push([doc.kind === 'invoice' ? 'Zahlbar bis' : 'Gültig bis', date(doc.dueDate)]);
-  if (company.vatId) info.push(['UID-Nr.', company.vatId]);
+  if (company.vatId && doc.showVatId) info.push(['UID-Nr.', company.vatId]);
   const infoX = PAGE_W - M - 210;
   let y = top + 16;
   pdf.fontSize(9);
@@ -148,8 +149,10 @@ export function renderDocumentPdf(
     pdf.fillColor('black');
     pdf.text(String(i + 1), cols.pos, ry, { width: 26 });
     pdf.text(qty(item.quantity), cols.qty, ry, { width: 50, align: 'right' });
-    pdf.text(money(item.unitPrice), cols.unit, ry, { width: 70, align: 'right' });
-    pdf.text(money(item.quantity * item.unitPrice), cols.total, ry, { width: 80, align: 'right' });
+    // Der Aufschlag steckt im Einzelpreis, der Kunde sieht ihn nicht als eigene Spalte
+    const unit = itemUnitPrice(item);
+    pdf.text(money(unit), cols.unit, ry, { width: 70, align: 'right' });
+    pdf.text(money(item.quantity * unit), cols.total, ry, { width: 80, align: 'right' });
     pdf.text(item.description, cols.desc, ry, { width: descW });
     pdf.y = Math.max(pdf.y, ry + h) + 6;
   });

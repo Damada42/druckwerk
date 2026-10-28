@@ -238,6 +238,10 @@ export interface Project {
   price: number | null;
   /** Geschätzte bzw. tatsächliche Druckzeit in Stunden */
   printHours: number | null;
+  /** Vorschlag für Angebot/Rechnung: Aufschlag auf jeden Einzelpreis in Prozent */
+  markupPercent: number;
+  /** Vorschlag für Angebot/Rechnung: eigene UID-Nummer aufs Dokument drucken */
+  showVatId: boolean;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
