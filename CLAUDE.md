@@ -133,12 +133,14 @@ React 19, Vite 7, Tailwind v4 (tokens in `index.css`), React Router 7 and TanSta
 
 ## Context
 
-- Target device: the user's phone, Samsung Internet on Android 10. Chrome on the phone fails to connect.
-- The server is reached at `https://<PC-IP>:3000` on the LAN. The phone only sees client changes after the `npm run prod` server has been restarted (it rebuilds the client), followed by a page reload on the phone.
+- Production: the user runs Druckwerk as a Home Assistant App (slug `570056f1_druckwerk`) and opens it on the phone in the HA Companion app (Android 10, same LAN or via Nabu Casa). New versions reach him only through a push to `main` plus a version bump in `ha-app/config.yaml`; HA then offers the update. The Portainer/Docker setup is the alternative.
+- Debugging the live App: read its log with the HA MCP tools (`ha_get_logs`, `source: "supervisor"`, `slug: "570056f1_druckwerk"`). A request that is missing there was rejected by HA before reaching the app (e.g. ingress `401`). Because of `TRUST_PROXY`, the logged `remoteAddress` is the forwarded client (e.g. the user's PC), not the socket; the ingress guard checks `req.socket.remoteAddress`, so such entries don't mean direct LAN access.
+- Local testing on the user's phone (Samsung Internet, Android 10; Chrome on the phone fails to connect): `https://<PC-IP>:3000` from `npm run prod`, which must be restarted to rebuild the client before reloading the page.
 - Roadmap:
   - Done: phases 1 (core + Kanban), 2 (filament scan), 3 (invoice reading) and 4 (Home Assistant for the Bambu Lab P1S). Phase 4 covers live status, control, speed, skipping objects, AMS linking and import, automatic filament deduction and several HA locations.
   - Done since: several cameras per printer (HA entities or direct MJPEG URLs).
-  - Done since: Druckwerk as a Home Assistant App (see "Home Assistant App" above). Not yet tried on the user's real HA (HA OS VM on Proxmox, amd64).
+  - Done since: Druckwerk as a Home Assistant App (see "Home Assistant App" above), running on the user's HA (HA OS VM on Proxmox, amd64).
   - Done since: storage locations for spools (switchable) and quotes/invoices as PDF. The user is in Austria: tax wording follows the Austrian UStG (small business note `§ 6 Abs. 1 Z 27 UStG`, "UID-Nummer", 20 % standard rate).
+  - Done in 0.4.0/0.5.0: editing a filament variety at once, markup % and UID switch per project and document, cost categories with unit and default price, quotes/invoices listing all cost positions, files opened in-app, project dialog staying open after saving, `NumberInput`.
   - Next, a Klipper printer (Artillery "SidewinderX1", via the `moonraker` integration in HA). Its HA entities couldn't be inspected yet because the printer was offline. Look at the real data first: Klipper skips objects via `EXCLUDE_OBJECT`, and the app's live status only understands `bambu_lab` so far.
 - The user's Home Assistant is reachable through the HA MCP tools in this environment. Use them (read-only) to look at real entity data, e.g. `ha_eval_template` with `BAMBU_TEMPLATE`. Never put the user's token anywhere; the user enters it in the app.
