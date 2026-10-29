@@ -1,6 +1,13 @@
-import { LOW_FILAMENT_GRAMS, storagePaths, storageTree, type FilamentSpool } from '@3dapp/shared';
+import {
+  spoolMinStock,
+  stockGroups,
+  storagePaths,
+  storageTree,
+  type FilamentSpool,
+  type StockGroup,
+} from '@3dapp/shared';
 import { ChevronDown, Copy, Minus, Pencil, Plus, ScanLine, Warehouse } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useConsume, useList, useSave, useSettings, useSpoolVariety } from '../api';
 import { EntityForm, type FieldDef } from '../components/EntityForm';
@@ -15,11 +22,13 @@ import {
   ErrorText,
   Field,
   Modal,
+  NumberInput,
   PageHeader,
   TextInput,
   cx,
   euro,
   grams,
+  parseNumber,
 } from '../components/ui';
 
 /** Angaben, die alle Spulen einer Sorte teilen – wie auf dem Server (SPOOL_VARIETY_FIELDS) */
@@ -34,15 +43,7 @@ const VARIETY_FIELDS = [
   'price',
 ];
 
-interface Group {
-  key: string;
-  colorName: string;
-  colorHex: string;
-  finish: string;
-  manufacturer: string;
-  spools: FilamentSpool[];
-  remaining: number;
-}
+type Group = StockGroup;
 
 export function FilamentPage() {
   const { data: spools = [], isLoading } = useList('spools');
@@ -64,35 +65,20 @@ export function FilamentPage() {
   const placeOf = (s: FilamentSpool) =>
     storageOn && s.storageLocationId ? (paths.get(s.storageLocationId) ?? null) : s.location;
 
-  const finishName = (id: number | null) => finishes.find((f) => f.id === id)?.name ?? 'Normal';
-
-  // Typ → Gruppen aus Farbe + Finish + Hersteller
+  // Typ → Sorten aus Farbe + Finish + Hersteller
   const byType = useMemo(() => {
     return types
       .map((type) => {
         const ofType = spools.filter((s) => s.typeId === type.id);
-        const groups = new Map<string, Group>();
-        for (const s of ofType) {
-          const finish = finishName(s.finishId);
-          const key = `${type.id}|${s.colorName.toLowerCase()}|${finish}|${s.manufacturer.toLowerCase()}`;
-          const g = groups.get(key) ?? {
-            key,
-            colorName: s.colorName,
-            colorHex: s.colorHex,
-            finish,
-            manufacturer: s.manufacturer,
-            spools: [],
-            remaining: 0,
-          };
-          g.spools.push(s);
-          g.remaining += s.weightRemainingG;
-          groups.set(key, g);
-        }
         return {
           type,
           total: ofType.reduce((sum, s) => sum + s.weightRemainingG, 0),
           count: ofType.length,
-          groups: [...groups.values()].sort((a, b) => a.colorName.localeCompare(b.colorName, 'de')),
+          groups: stockGroups(ofType, types, finishes).sort(
+            (a, b) =>
+              a.colorName.localeCompare(b.colorName, 'de') ||
+              a.manufacturers[0].localeCompare(b.manufacturers[0], 'de'),
+          ),
         };
       })
       .filter((t) => t.count > 0);
@@ -106,7 +92,7 @@ export function FilamentPage() {
       required: true,
       options: types.map((t) => ({ value: t.id, label: t.name })),
     },
-    { key: 'manufacturer', label: 'Hersteller', required: true, placeholder: 'z.B. Bambu Lab' },
+    { key: 'manufacturer', label: 'Hersteller', type: 'manufacturer', required: true },
     { key: 'colorName', label: 'Farbe', required: true, placeholder: 'z.B. Schwarz' },
     { key: 'colorHex', label: 'Farbton', type: 'color' },
     {
@@ -207,35 +193,52 @@ export function FilamentPage() {
             <ul className="divide-y divide-[var(--border)]">
               {groups.map((g) => {
                 const isOpen = open === g.key;
-                const low = g.remaining < LOW_FILAMENT_GRAMS;
+                const low = g.remaining < g.minStockG;
+                const toggle = () => setOpen(isOpen ? null : g.key);
                 return (
                   <li key={g.key}>
-                    <button
-                      type="button"
-                      onClick={() => setOpen(isOpen ? null : g.key)}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-2"
-                    >
-                      <ColorDot color={g.colorHex} size={22} />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium">
-                          {g.colorName}
-                          {g.finish !== 'Normal' && <Badge className="ml-2">{g.finish}</Badge>}
+                    <div className="flex items-center gap-3 px-4 py-3 hover:bg-surface-2">
+                      <button
+                        type="button"
+                        onClick={toggle}
+                        aria-expanded={isOpen}
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      >
+                        <ColorDot color={g.colorHex} size={22} />
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">
+                            {g.colorName}
+                            {g.finish !== 'Normal' && <Badge className="ml-2">{g.finish}</Badge>}
+                          </div>
+                          <div className="truncate text-xs text-muted">{g.manufacturers[0]}</div>
                         </div>
-                        <div className="truncate text-xs text-muted">{g.manufacturer}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className={cx('font-semibold tabular-nums', low && 'text-red-600')}>
-                          {grams(g.remaining)}
+                        {/* Menge steht sichtbar rechts neben dem Mindestmengen-Feld */}
+                        <span className="sr-only">
+                          {`, ${grams(g.remaining)}, ${g.spools.length} ${g.spools.length === 1 ? 'Spule' : 'Spulen'}`}
+                        </span>
+                      </button>
+                      <MinStockInput group={g} typeMin={type.minStockG} />
+                      <button
+                        type="button"
+                        onClick={toggle}
+                        tabIndex={-1}
+                        aria-hidden
+                        className="flex shrink-0 items-center gap-3 text-right"
+                      >
+                        <div className="text-right">
+                          <div className={cx('font-semibold tabular-nums', low && 'text-red-600')}>
+                            {grams(g.remaining)}
+                          </div>
+                          <div className="text-xs text-muted">
+                            {g.spools.length} {g.spools.length === 1 ? 'Spule' : 'Spulen'}
+                          </div>
                         </div>
-                        <div className="text-xs text-muted">
-                          {g.spools.length} {g.spools.length === 1 ? 'Spule' : 'Spulen'}
-                        </div>
-                      </div>
-                      <ChevronDown
-                        size={18}
-                        className={cx('shrink-0 text-muted transition', isOpen && 'rotate-180')}
-                      />
-                    </button>
+                        <ChevronDown
+                          size={18}
+                          className={cx('shrink-0 text-muted transition', isOpen && 'rotate-180')}
+                        />
+                      </button>
+                    </div>
                     {isOpen && (
                       <ul className="space-y-2 bg-surface-2 px-4 py-3">
                         {g.spools.length > 1 && (
@@ -254,6 +257,7 @@ export function FilamentPage() {
                           <SpoolRow
                             key={s.id}
                             spool={s}
+                            minStock={spoolMinStock(s, types)}
                             place={placeOf(s)}
                             onEdit={() => setEditing(s)}
                             onConsume={() => setConsuming(s)}
@@ -320,14 +324,53 @@ export function FilamentPage() {
   );
 }
 
+/**
+ * Eigene Mindestmenge einer Sorte, direkt in der Liste. Leer = Vorgabe des Filamenttyps (aus den
+ * Einstellungen); gespeichert wird beim Verlassen des Felds, für alle Spulen der Sorte.
+ */
+function MinStockInput({ group, typeMin }: { group: Group; typeMin: number }) {
+  const variety = useSpoolVariety();
+  const [value, setValue] = useState<number | null>(group.ownMinStockG);
+  // Anderswo geändert (z.B. „Sorte bearbeiten“): neuen Wert übernehmen
+  useEffect(() => setValue(group.ownMinStockG), [group.ownMinStockG]);
+  const label = `Mindestmenge ${group.colorName} ${group.manufacturers[0]}`;
+  const commit = (text: string) => {
+    const n = parseNumber(text);
+    const next = n === null ? null : Math.max(0, n);
+    if (next === group.ownMinStockG) return;
+    variety.mutate({ ids: group.spools.map((s) => s.id), data: { minStockG: next } });
+  };
+  return (
+    <label
+      className="flex shrink-0 items-center gap-1 text-xs text-muted"
+      title="Ab dieser Restmenge gilt die Sorte als knapp. Leer = Vorgabe des Filamenttyps."
+    >
+      <span className="max-sm:sr-only">min.</span>
+      <NumberInput
+        aria-label={label}
+        value={value}
+        min={0}
+        onChange={setValue}
+        onBlur={(e) => commit(e.currentTarget.value)}
+        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+        placeholder={String(typeMin)}
+        className={cx('!w-16 !px-2 !py-1 text-right', variety.isError && 'border-red-500')}
+      />
+      g
+    </label>
+  );
+}
+
 function SpoolRow({
   spool,
+  minStock,
   place,
   onEdit,
   onConsume,
   onDuplicate,
 }: {
   spool: FilamentSpool;
+  minStock: number;
   place: string | null;
   onEdit: () => void;
   onConsume: () => void;
@@ -351,7 +394,7 @@ function SpoolRow({
             <div
               className={cx(
                 'h-full rounded-full',
-                spool.weightRemainingG < LOW_FILAMENT_GRAMS ? 'bg-red-500' : 'bg-accent',
+                spool.weightRemainingG < minStock ? 'bg-red-500' : 'bg-accent',
               )}
               style={{ width: `${pct}%` }}
             />

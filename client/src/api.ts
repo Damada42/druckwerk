@@ -20,6 +20,7 @@ import type {
   Finish,
   Input,
   Invoice,
+  Manufacturer,
   Person,
   AppSettings,
   CompanyProfile,
@@ -100,6 +101,7 @@ export interface Resources {
   projects: ProjectWithDetails;
   'storage-locations': StorageLocation;
   'cost-categories': CostCategory;
+  manufacturers: Manufacturer;
 }
 
 export type ResourceName = keyof Resources;
@@ -118,6 +120,11 @@ export function useSave<R extends ResourceName>(name: R) {
     if (name === 'printers') qc.invalidateQueries({ queryKey: ['printer-live'] });
     // Gelöschte Lagerplätze nehmen die Zuordnung der Spulen mit
     if (name === 'storage-locations') qc.invalidateQueries({ queryKey: ['spools'] });
+    // Umbenannte Hersteller ändern auch die Spulen; Mindestmengen der Typen die Übersicht
+    if (name === 'manufacturers' || name === 'filament-types')
+      qc.invalidateQueries({ queryKey: ['spools'] });
+    // Neue Hersteller aus einer Spule landen in der Herstellerliste
+    if (name === 'spools') qc.invalidateQueries({ queryKey: ['manufacturers'] });
   };
   const save = useMutation({
     mutationFn: ({ id, ...data }: Partial<Input<Resources[R]>> & { id?: number }) =>
@@ -441,6 +448,36 @@ export function useBookings(printerId: number) {
     },
   });
   return { list, undo };
+}
+
+/** Komplettes Backup (ZIP) herunterladen */
+export async function downloadBackup() {
+  const res = await fetch(appUrl('/api/backup'), { redirect: 'manual' });
+  if (res.type === 'opaqueredirect' || res.status === 401) loginExpired();
+  if (!res.ok) throw new ApiError(`Fehler ${res.status}`);
+  const name =
+    /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ??
+    'druckwerk-backup.zip';
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return name;
+}
+
+/** Backup einspielen: ersetzt alle Daten, danach wird alles neu geladen */
+export function useBackupImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return api.post<{ ok: true; spools: number; projects: number }>('/backup', form);
+    },
+    onSuccess: () => qc.invalidateQueries(),
+  });
 }
 
 /** Gemeinsame Angaben einer Sorte (Preis, Farbe …) für mehrere Spulen auf einmal ändern */

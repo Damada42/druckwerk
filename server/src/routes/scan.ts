@@ -3,6 +3,7 @@ import { count, eq, sum } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { schema, type Db } from '../db/index.js';
 import { missingFields, pickColumns } from './crud.js';
+import { prepareSpool } from './manufacturers.js';
 
 const { filamentProducts, filamentSpools } = schema;
 
@@ -35,7 +36,7 @@ export function registerScanRoutes(app: FastifyInstance, db: Db) {
   /** Mehrere gleiche Spulen anlegen und den Barcode optional als Sorte merken. */
   app.post<{ Body: SpoolBatchInput }>('/spools/batch', (req, reply) => {
     const { spool, count: rawCount, rememberBarcode } = req.body ?? ({} as SpoolBatchInput);
-    const data = pickColumns(filamentSpools, spool);
+    let data = pickColumns(filamentSpools, spool);
     const missing = missingFields(data, ['typeId', 'manufacturer', 'colorName']);
     if (missing.length) {
       return reply.code(400).send({ error: `Pflichtfelder fehlen: ${missing.join(', ')}` });
@@ -44,6 +45,7 @@ export function registerScanRoutes(app: FastifyInstance, db: Db) {
     if (!Number.isFinite(n) || n < 1 || n > 50) {
       return reply.code(400).send({ error: 'Anzahl muss zwischen 1 und 50 liegen' });
     }
+    data = prepareSpool(db, data, true);
     const barcode =
       typeof data.barcode === 'string' && data.barcode ? cleanBarcode(data.barcode) : null;
     const total = Number(data.weightTotalG ?? 1000);

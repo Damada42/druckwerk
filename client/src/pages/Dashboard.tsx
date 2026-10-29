@@ -1,10 +1,13 @@
-import { LOW_FILAMENT_GRAMS, PROJECT_STATUS_LABELS, type ProjectStatus } from '@3dapp/shared';
+import { PROJECT_STATUS_LABELS, lowStock, type ProjectStatus } from '@3dapp/shared';
 import { ArrowRight, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useList, useStats } from '../api';
+import { useList, useSettings, useStats } from '../api';
 import { useNavItems } from '../components/Layout';
 import { PrinterLiveSummary } from '../components/PrinterLive';
-import { Card, ColorDot, PageHeader, dateDe, grams } from '../components/ui';
+import { Badge, Card, ColorDot, PageHeader, dateDe, grams } from '../components/ui';
+
+/** So viele knappe Sorten zeigt die Übersicht, der Rest steht unter „Filament“ */
+const LOW_SHOWN = 6;
 
 const STATUS_DOT: Record<ProjectStatus, string> = {
   open: 'bg-stone-400',
@@ -18,9 +21,15 @@ export function DashboardPage() {
   const { data: projects = [] } = useList('projects');
   const { data: spools = [] } = useList('spools');
   const { data: printers = [] } = useList('printers');
+  const { data: types = [] } = useList('filament-types');
+  const { data: finishes = [] } = useList('finishes');
+  const { data: settings } = useSettings();
 
   const active = projects.filter((p) => p.status === 'in_progress').slice(0, 5);
-  const low = spools.filter((s) => s.weightRemainingG < LOW_FILAMENT_GRAMS).slice(0, 5);
+  const byColor = settings?.lowStockGroup === 'color';
+  // Je Sorte (oder nur je Farbe) zusammengezählt, siehe Einstellungen
+  const low = lowStock(spools, types, finishes, settings?.lowStockGroup);
+  const typeName = (id: number) => types.find((t) => t.id === id)?.name ?? '';
   const linked = printers.filter((p) => p.haDeviceId);
 
   const tileInfo: Record<string, string> = {
@@ -116,22 +125,37 @@ export function DashboardPage() {
         <Card className="p-5">
           <h2 className="mb-3 font-semibold">Filament wird knapp</h2>
           {low.length === 0 ? (
-            <p className="text-sm text-muted">Alle Spulen haben mehr als {LOW_FILAMENT_GRAMS} g.</p>
+            <p className="text-sm text-muted">Kein Filament unter der Mindestmenge.</p>
           ) : (
-            <ul className="space-y-2">
-              {low.map((s) => (
-                <li key={s.id} className="flex items-center justify-between gap-2 text-sm">
+            <ul className="space-y-2" aria-label="Knappes Filament">
+              {low.slice(0, LOW_SHOWN).map((g) => (
+                <li key={g.key} className="flex items-center justify-between gap-2 text-sm">
                   <span className="flex min-w-0 items-center gap-2">
-                    <ColorDot color={s.colorHex} />
-                    <span className="truncate">
-                      {s.manufacturer} {s.colorName}
+                    <ColorDot color={g.colorHex} />
+                    <span className="min-w-0">
+                      <span className="block truncate">
+                        {byColor ? typeName(g.typeId) : g.manufacturers[0]} {g.colorName}
+                        {g.finish !== 'Normal' && <Badge className="ml-1.5">{g.finish}</Badge>}
+                      </span>
+                      <span className="block truncate text-xs text-muted">
+                        {byColor ? g.manufacturers.join(', ') : typeName(g.typeId)}
+                        {g.spools.length > 1 && ` · ${g.spools.length} Spulen`}
+                      </span>
                     </span>
                   </span>
-                  <span className="shrink-0 font-medium text-red-600 tabular-nums">
-                    {grams(s.weightRemainingG)}
+                  <span className="shrink-0 text-right tabular-nums">
+                    <span className="block font-medium text-red-600">{grams(g.remaining)}</span>
+                    <span className="block text-xs text-muted">min. {grams(g.minStockG)}</span>
                   </span>
                 </li>
               ))}
+              {low.length > LOW_SHOWN && (
+                <li>
+                  <Link to="/filament" className="text-sm text-accent hover:underline">
+                    {low.length - LOW_SHOWN} weitere →
+                  </Link>
+                </li>
+              )}
             </ul>
           )}
           {linked.length > 0 && (

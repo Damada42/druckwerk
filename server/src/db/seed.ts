@@ -11,6 +11,11 @@ const FILAMENT_TYPES = [
   ['PA', 'Nylon, sehr zäh'],
   ['PC', 'Polycarbonat, sehr hitzebeständig'],
   ['PVA', 'Wasserlösliches Stützmaterial'],
+  // Ab 0014 (bestehende Installationen bekommen sie über die Migration)
+  ['PCTG', 'Wie PETG, zäher und klarer'],
+  ['PVB', 'Mit Isopropanol glättbar'],
+  ['PP', 'Polypropylen, leicht und chemikalienbeständig'],
+  ['TPE', 'Weich-elastisch, noch flexibler als TPU'],
 ] as const;
 
 const FINISHES = ['Normal', 'Matt', 'Silk', 'Glow', 'Glitzer', 'Marmor', 'Holz', 'Carbon (CF)'];

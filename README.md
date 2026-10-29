@@ -239,3 +239,18 @@ gleich mit Angebot oder Rechnung weiter.
 **Sorte bearbeiten:** Hast du mehrere Spulen derselben Sorte (gleicher Typ, Farbe, Finish, Hersteller),
 ändert „Sorte bearbeiten“ in der aufgeklappten Gruppe Preis, Farbe, Hersteller, Finish, Durchmesser und
 Spulengewicht für alle auf einmal. Restmenge, Lagerplatz und Notizen bleiben je Spule.
+
+**Filament wird knapp:** Jeder Filamenttyp hat unter „Einstellungen“ eine Mindestmenge (Vorgabe 200 g).
+Auf der Filament-Seite lässt sie sich je Sorte im Feld „min.“ anpassen (leer = Vorgabe des Typs); neue
+Spulen derselben Sorte übernehmen sie. In den Einstellungen wählst du, wie die Übersicht zusammenzählt:
+nach Hersteller und Farbe (150 g Bambu Lab Schwarz sind knapp, auch wenn 800 g Sunlu Schwarz da sind)
+oder nur nach Farbe (zusammen 950 g Schwarz reichen).
+
+**Herstellerliste:** Der Hersteller einer Spule kommt aus einer Auswahl (Einstellungen → Hersteller,
+mit den gängigen Herstellern vorbefüllt), damit keine Tippfehler doppelte Sorten erzeugen. Ein neuer
+Hersteller lässt sich direkt im Formular über „Neuer Hersteller …“ eintragen; „bambu lab“ wird zu
+„Bambu Lab“. Umbenennen in den Einstellungen ändert alle Spulen mit.
+
+**Backup:** Unter „Einstellungen → Backup“ lädt „Backup herunterladen“ eine ZIP-Datei mit allen Daten,
+Rechnungen, Fotos und dem Logo. „Backup einspielen“ ersetzt alles durch den Stand der Datei (auch aus
+älteren Versionen); der vorherige Stand bleibt als Sicherheitskopie im Datenordner unter `backup/`.

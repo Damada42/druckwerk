@@ -50,9 +50,6 @@ export const MEMBER_ROLE_LABELS: Record<MemberRole, string> = {
   support: 'Unterstützung',
 };
 
-/** Ab dieser Restmenge (g) gilt eine Spule als „knapp“. */
-export const LOW_FILAMENT_GRAMS = 200;
-
 export interface Customer {
   id: number;
   name: string;
@@ -97,8 +94,9 @@ export interface BarcodeLookup {
 
 /** Mehrere gleiche Spulen auf einmal anlegen (z.B. nach Scan) */
 export interface SpoolBatchInput {
-  spool: Omit<FilamentSpool, 'id' | 'createdAt' | 'weightRemainingG'> & {
+  spool: Omit<FilamentSpool, 'id' | 'createdAt' | 'weightRemainingG' | 'minStockG'> & {
     weightRemainingG?: number;
+    minStockG?: number | null;
   };
   count: number;
   /** Barcode als Sorte merken bzw. aktualisieren */
@@ -109,6 +107,13 @@ export interface FilamentType {
   id: number;
   name: string;
   description: string | null;
+  /** Ab dieser Restmenge (g) gilt eine Sorte dieses Typs als knapp */
+  minStockG: number;
+}
+
+export interface Manufacturer {
+  id: number;
+  name: string;
 }
 
 export interface Finish {
@@ -137,6 +142,8 @@ export interface FilamentSpool {
   /** Barcode (EAN) der Sorte, falls per Scan angelegt */
   barcode: string | null;
   notes: string | null;
+  /** Eigene Mindestmenge der Sorte (g); null = Vorgabe des Filamenttyps */
+  minStockG: number | null;
   createdAt: string;
 }
 
@@ -300,4 +307,5 @@ export * from './document';
 export * from './invoice';
 export * from './label';
 export * from './printer';
+export * from './stock';
 export * from './storage';

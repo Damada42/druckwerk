@@ -1,7 +1,8 @@
-import { KNOWN_MANUFACTURERS, type FilamentSpool } from '@3dapp/shared';
+import type { FilamentSpool } from '@3dapp/shared';
 import { CheckCircle2, Minus, Plus, ScanLine, Sparkles } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useBarcodeLookup, useList, useSettings, useSpoolBatch } from '../api';
+import { ManufacturerSelect } from '../components/ManufacturerSelect';
 import { StorageSelect } from './Storage';
 import {
   Button,
@@ -69,7 +70,6 @@ export function ScanSpoolForm({
   const lookup = useBarcodeLookup(barcode);
   const { data: types = [] } = useList('filament-types');
   const { data: finishes = [] } = useList('finishes');
-  const { data: spools = [] } = useList('spools');
   const { data: locations = [] } = useList('storage-locations');
   const storageOn = !!useSettings().data?.storageLocations;
   const batch = useSpoolBatch();
@@ -117,11 +117,6 @@ export function ScanSpoolForm({
     });
     setSources(src);
   }, [ready, form, product, result.guess, result.generic, types, finishes, barcode]);
-
-  const manufacturers = useMemo(
-    () => [...new Set([...spools.map((s) => s.manufacturer), ...KNOWN_MANUFACTURERS])].sort(),
-    [spools],
-  );
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => {
     setForm((f) => (f ? { ...f, [key]: value } : f));
@@ -249,16 +244,10 @@ export function ScanSpoolForm({
               </Select>
             </Field>
             <Field label="Hersteller *" badge={<Recognized source={sources.manufacturer} />}>
-              <TextInput
-                list="scan-manufacturers"
+              <ManufacturerSelect
                 value={form.manufacturer}
-                onChange={(e) => set('manufacturer', e.target.value)}
+                onChange={(v) => set('manufacturer', v)}
               />
-              <datalist id="scan-manufacturers">
-                {manufacturers.map((m) => (
-                  <option key={m} value={m} />
-                ))}
-              </datalist>
             </Field>
             {/* Farbwähler außerhalb des Labels, damit „Farbe“ zum Textfeld gehört */}
             <div className="flex items-end gap-2">

@@ -28,10 +28,16 @@ const place = (name: string, parentId?: number) =>
 
 describe('Einstellungen', () => {
   it('hat die Lagerplätze anfangs aus und merkt sich den Schalter', async () => {
-    expect((await app.inject('/api/settings')).json()).toEqual({ storageLocations: false });
+    expect((await app.inject('/api/settings')).json()).toEqual({
+      storageLocations: false,
+      lowStockGroup: 'manufacturer',
+    });
     const res = await send('PUT', '/api/settings', { storageLocations: true, fremd: 1 });
-    expect(res.body).toEqual({ storageLocations: true });
-    expect((await app.inject('/api/settings')).json()).toEqual({ storageLocations: true });
+    expect(res.body).toEqual({ storageLocations: true, lowStockGroup: 'manufacturer' });
+    expect((await app.inject('/api/settings')).json()).toEqual({
+      storageLocations: true,
+      lowStockGroup: 'manufacturer',
+    });
     expect((await send('PUT', '/api/settings', { storageLocations: 'ja' })).status).toBe(400);
   });
 });

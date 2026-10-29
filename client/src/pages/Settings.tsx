@@ -14,6 +14,12 @@ import { Link } from 'react-router-dom';
 import { CompanyCard } from '../components/CompanyCard';
 import { CostCategoriesCard } from '../components/CostCategoriesCard';
 import {
+  BackupCard,
+  FilamentTypesCard,
+  LowStockCard,
+  ManufacturersCard,
+} from '../components/FilamentSettings';
+import {
   useHaConnections,
   useHaStatus,
   useList,
@@ -28,16 +34,21 @@ export function SettingsPage() {
     <>
       <PageHeader
         title="Einstellungen"
-        subtitle="Stammdaten, Firmendaten für Angebote und Rechnungen, Lagerplätze und Home Assistant."
+        subtitle="Stammdaten, Firmendaten für Angebote und Rechnungen, Lagerplätze, Home Assistant und Backup."
       />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <NameList resource="filament-types" title="Filamenttypen" placeholder="z.B. PLA-CF" />
-        <NameList resource="finishes" title="Art / Finish" placeholder="z.B. Seidenmatt" />
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <FilamentTypesCard />
+        <div className="grid gap-4">
+          <LowStockCard />
+          <NameList resource="finishes" title="Art / Finish" placeholder="z.B. Seidenmatt" />
+        </div>
+        <ManufacturersCard />
       </div>
       <CostCategoriesCard />
       <CompanyCard />
       <StorageCard />
       <HomeAssistantCard />
+      <BackupCard />
     </>
   );
 }
@@ -293,7 +304,7 @@ function NameList({
   title,
   placeholder,
 }: {
-  resource: 'filament-types' | 'finishes';
+  resource: 'finishes';
   title: string;
   placeholder: string;
 }) {

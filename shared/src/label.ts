@@ -53,6 +53,10 @@ export const KNOWN_MANUFACTURERS = [
   'Giantarm',
   'Snapmaker',
   'QIDI',
+  'Devil Design',
+  'Fiberlogy',
+  'Rosa3D',
+  'EVO-tech',
 ];
 
 /** Schreibweisen auf Etiketten → Name in der App. */

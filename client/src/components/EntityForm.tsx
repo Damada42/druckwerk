@@ -2,13 +2,24 @@ import { Trash2 } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { useSave, type ResourceName, type Resources } from '../api';
+import { ManufacturerSelect } from './ManufacturerSelect';
 import { Button, ErrorText, Field, Modal, Select, TextArea, TextInput } from './ui';
 
 export interface FieldDef {
   key: string;
   label: string;
   type?:
-    'text' | 'email' | 'tel' | 'number' | 'date' | 'textarea' | 'color' | 'checkbox' | 'select';
+    | 'text'
+    | 'email'
+    | 'tel'
+    | 'number'
+    | 'date'
+    | 'textarea'
+    | 'color'
+    | 'checkbox'
+    | 'select'
+    /** Auswahl aus der Herstellerliste, mit „Neuer Hersteller …“ */
+    | 'manufacturer';
   options?: { value: string | number; label: string }[];
   required?: boolean;
   wide?: boolean;
@@ -141,6 +152,12 @@ export function EntityForm<R extends ResourceName>({
                     </option>
                   ))}
                 </Select>
+              ) : f.type === 'manufacturer' ? (
+                <ManufacturerSelect
+                  value={(value as string) ?? ''}
+                  onChange={set}
+                  autoFocus={i === 0}
+                />
               ) : f.type === 'color' ? (
                 <div className="flex gap-2">
                   <input

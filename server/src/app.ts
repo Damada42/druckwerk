@@ -21,6 +21,13 @@ import { registerCameraRoutes } from './routes/cameras.js';
 import { registerStorageRoutes } from './routes/storage.js';
 import { registerDocumentRoutes } from './routes/documents.js';
 import { registerCostCategoryRoutes } from './routes/costCategories.js';
+import { registerBackupRoutes } from './routes/backup.js';
+import {
+  canonicalManufacturer,
+  parseMinStock,
+  prepareSpool,
+  registerManufacturerRoutes,
+} from './routes/manufacturers.js';
 import { createHaClient } from './ha/client.js';
 import { createWatcher } from './ha/watcher.js';
 
@@ -34,6 +41,7 @@ const SPOOL_VARIETY_FIELDS = new Set([
   'diameter',
   'weightTotalG',
   'price',
+  'minStockG',
 ]);
 
 export interface AppOptions {
@@ -140,15 +148,24 @@ export async function buildApp(options: AppOptions) {
       });
       registerCrud(api, db, '/customers', schema.customers, { required: ['name'] });
       registerCrud(api, db, '/persons', schema.persons, { required: ['name'] });
-      registerCrud(api, db, '/filament-types', schema.filamentTypes, { required: ['name'] });
+      // Leere Mindestmenge beim Typ: zurück auf die Vorgabe 200 g
+      const typeMinStock = (data: Record<string, unknown>) =>
+        'minStockG' in data ? { ...data, minStockG: parseMinStock(data.minStockG) ?? 200 } : data;
+      registerCrud(api, db, '/filament-types', schema.filamentTypes, {
+        required: ['name'],
+        beforeCreate: typeMinStock,
+        beforeUpdate: typeMinStock,
+      });
+      registerManufacturerRoutes(api, db);
       registerCrud(api, db, '/finishes', schema.finishes, { required: ['name'] });
       registerCrud(api, db, '/printers', schema.printers, { required: ['name', 'model'] });
       registerCrud(api, db, '/spools', schema.filamentSpools, {
         required: ['typeId', 'manufacturer', 'colorName'],
         beforeCreate: (data) => ({
-          ...data,
+          ...prepareSpool(db, data, true),
           weightRemainingG: data.weightRemainingG ?? data.weightTotalG ?? 1000,
         }),
+        beforeUpdate: (data) => prepareSpool(db, data, false),
       });
 
       /** Verbrauch von einer Spule abbuchen (negativ = zurückbuchen). */
@@ -192,6 +209,7 @@ export async function buildApp(options: AppOptions) {
             ),
           );
           if (!Object.keys(data).length) return reply.code(400).send({ error: 'Nichts zu ändern' });
+          Object.assign(data, prepareSpool(db, data, false));
           const missing = missingFields(data, ['typeId', 'manufacturer', 'colorName']).filter(
             (f) => f in data,
           );
@@ -214,6 +232,14 @@ export async function buildApp(options: AppOptions) {
 
       registerCrud(api, db, '/products', schema.filamentProducts, {
         required: ['barcode', 'typeId', 'manufacturer', 'colorName'],
+        beforeCreate: (data) => ({
+          ...data,
+          manufacturer: canonicalManufacturer(db, data.manufacturer),
+        }),
+        beforeUpdate: (data) =>
+          'manufacturer' in data
+            ? { ...data, manufacturer: canonicalManufacturer(db, data.manufacturer) }
+            : data,
       });
       registerScanRoutes(api, db);
       registerClientLogRoutes(api, options.clientLogFile);
@@ -225,6 +251,15 @@ export async function buildApp(options: AppOptions) {
       registerStorageRoutes(api, db);
       registerDocumentRoutes(api, db, options.uploadDir);
       registerCostCategoryRoutes(api, db);
+      registerBackupRoutes(api, db, {
+        uploadDir: options.uploadDir,
+        // Sicherheitskopie vor einem Import neben der Datenbank (data/backup)
+        safetyDir:
+          options.dbFile === ':memory:'
+            ? undefined
+            : path.join(path.dirname(options.dbFile), 'backup'),
+        supervisorToken: options.supervisorToken,
+      });
     },
     { prefix: '/api' },
   );

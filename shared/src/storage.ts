@@ -1,5 +1,7 @@
 // Lagerplätze für Filament: ein Baum wie „Wandregal › Links › Reihe 2“.
 
+import type { LowStockGroup } from './stock';
+
 export interface StorageLocation {
   id: number;
   name: string;
@@ -14,9 +16,14 @@ export interface StorageLocation {
 export interface AppSettings {
   /** Lagerplätze verwalten und Spulen zuordnen */
   storageLocations: boolean;
+  /** „Filament wird knapp“: je Hersteller und Farbe oder nur je Farbe zusammenzählen */
+  lowStockGroup: LowStockGroup;
 }
 
-export const DEFAULT_SETTINGS: AppSettings = { storageLocations: false };
+export const DEFAULT_SETTINGS: AppSettings = {
+  storageLocations: false,
+  lowStockGroup: 'manufacturer',
+};
 
 const byPosition = (a: StorageLocation, b: StorageLocation) =>
   a.position - b.position || a.id - b.id;

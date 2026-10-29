@@ -10,6 +10,8 @@ interface CrudOptions {
   required?: string[];
   /** Wird vor dem Anlegen auf die Daten angewendet. */
   beforeCreate?: (data: Record<string, unknown>) => Record<string, unknown>;
+  /** Wird vor dem Ändern auf die Daten angewendet. */
+  beforeUpdate?: (data: Record<string, unknown>) => Record<string, unknown>;
 }
 
 const READONLY = new Set(['id', 'createdAt', 'updatedAt']);
@@ -70,7 +72,8 @@ export function registerCrud(
   });
 
   app.put<{ Params: { id: string } }>(`${path}/:id`, (req, reply) => {
-    const data = pickColumns(table, req.body);
+    let data = pickColumns(table, req.body);
+    if (options.beforeUpdate && Object.keys(data).length) data = options.beforeUpdate(data);
     const id = parseId(req.params.id);
     if (Object.keys(data).length === 0) {
       return (

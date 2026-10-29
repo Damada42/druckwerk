@@ -1,8 +1,9 @@
-import { LOW_FILAMENT_GRAMS, type DashboardStats } from '@3dapp/shared';
-import { count, lt, sum } from 'drizzle-orm';
+import { lowStock, type DashboardStats } from '@3dapp/shared';
+import { count, sum } from 'drizzle-orm';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import type { FastifyInstance } from 'fastify';
 import { schema, type Db } from '../db/index.js';
+import { readSettings } from './storage.js';
 
 export function getStats(db: Db): DashboardStats {
   const byStatus = db
@@ -19,11 +20,13 @@ export function getStats(db: Db): DashboardStats {
     .select({ n: count(), total: sum(schema.filamentSpools.weightRemainingG) })
     .from(schema.filamentSpools)
     .get();
-  const low = db
-    .select({ n: count() })
-    .from(schema.filamentSpools)
-    .where(lt(schema.filamentSpools.weightRemainingG, LOW_FILAMENT_GRAMS))
-    .get();
+  // Knappe Sorten wie in der Übersicht (zusammengezählt laut Einstellung)
+  const low = lowStock(
+    db.select().from(schema.filamentSpools).all(),
+    db.select().from(schema.filamentTypes).all(),
+    db.select().from(schema.finishes).all(),
+    readSettings(db).lowStockGroup,
+  );
 
   return {
     projects,
@@ -32,7 +35,7 @@ export function getStats(db: Db): DashboardStats {
     printers: countOf(schema.printers),
     spools: filament?.n ?? 0,
     filamentTotalG: Number(filament?.total ?? 0),
-    lowSpools: low?.n ?? 0,
+    lowSpools: low.length,
   };
 }
 

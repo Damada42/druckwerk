@@ -56,7 +56,7 @@ test('Neuer Barcode per Foto: Sorte einmal ausfüllen, mehrere Spulen anlegen', 
   await expect(d.getByLabel('Barcode', { exact: true })).toHaveValue(EAN);
 
   await d.getByLabel(/^Filamenttyp/).selectOption({ label: 'PLA' });
-  await d.getByLabel(/^Hersteller/).fill('Sunlu');
+  await d.getByLabel(/^Hersteller/).selectOption('Sunlu');
   await d.getByLabel(/^Farbe/).fill('Orange');
   await d.getByLabel(/^Preis pro Spule/).fill('16,99');
   await d.getByRole('button', { name: 'Eine mehr' }).click();
@@ -130,7 +130,7 @@ test('Allgemeiner Hersteller-QR-Code: Hersteller erkannt, Sorte wird nicht gemer
 
   const d = dialog(page);
   await expect(d.getByText(/enthält nur die Hersteller-Webseite/)).toBeVisible({ timeout: 15_000 });
-  await expect(d.getByLabel(/^Hersteller/)).toHaveValue('Nobufil');
+  await expect(d.getByLabel(/^Hersteller/)).toHaveValue('nobufil');
   await expect(d.getByLabel(/Sorte zu diesem Barcode merken/)).not.toBeChecked();
 });
 
@@ -167,7 +167,7 @@ test('Fehlende Pflichtfelder werden genannt statt still blockiert', async ({ pag
   await expect(d.getByRole('alert')).toContainText('Filamenttyp, Hersteller, Farbe');
 
   await d.getByLabel(/^Filamenttyp/).selectOption({ label: 'PETG' });
-  await d.getByLabel(/^Hersteller/).fill('eSun');
+  await d.getByLabel(/^Hersteller/).selectOption('eSun');
   await d.getByRole('button', { name: 'Spule anlegen' }).click();
   await expect(d.getByRole('alert')).toContainText('Farbe');
   await expect(d.getByRole('alert')).not.toContainText('Hersteller');

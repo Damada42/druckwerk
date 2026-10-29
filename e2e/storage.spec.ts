@@ -14,7 +14,9 @@ test('Lagerplätze einrichten und Spulen zuordnen', async ({ page, request }) =>
   await page.goto('/einstellungen');
   const nav = page.getByRole('complementary');
   await expect(nav.getByRole('link', { name: 'Lager' })).toHaveCount(0);
-  await page.getByLabel(/Lagerplätze verwalten/).check();
+  // Gesteuertes Kästchen: legt sich erst nach dem Speichern um, daher click statt check
+  await page.getByLabel(/Lagerplätze verwalten/).click();
+  await expect(page.getByLabel(/Lagerplätze verwalten/)).toBeChecked();
   await expect(nav.getByRole('link', { name: 'Lager' })).toBeVisible();
   await page.getByRole('link', { name: /Lagerplätze einrichten/ }).click();
 

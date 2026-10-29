@@ -45,6 +45,14 @@ export const filamentTypes = sqliteTable('filament_types', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull().unique(),
   description: text('description'),
+  /** Ab dieser Restmenge (g) gilt eine Sorte als knapp – Vorgabe für alle Spulen des Typs */
+  minStockG: real('min_stock_g').notNull().default(200),
+});
+
+/** Herstellerliste, damit derselbe Hersteller nicht in mehreren Schreibweisen auftaucht */
+export const manufacturers = sqliteTable('manufacturers', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull().unique(),
 });
 
 export const finishes = sqliteTable('finishes', {
@@ -84,6 +92,8 @@ export const filamentSpools = sqliteTable('filament_spools', {
   haTrayEntity: text('ha_tray_entity'),
   barcode: text('barcode'),
   notes: text('notes'),
+  /** Eigene Mindestmenge der Sorte (g); leer = Vorgabe des Filamenttyps */
+  minStockG: real('min_stock_g'),
   createdAt: createdAt(),
 });
 

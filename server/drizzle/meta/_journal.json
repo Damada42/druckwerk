@@ -92,6 +92,20 @@
       "when": 1793227627695,
       "tag": "0012_price_auto",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1793309240791,
+      "tag": "0013_stock_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1793309966527,
+      "tag": "0014_known_manufacturers",
+      "breakpoints": true
     }
   ]
 }

@@ -82,7 +82,7 @@ test('Filamentspule anlegen und Verbrauch abbuchen', async ({ page }) => {
   await page.goto('/filament');
   await page.getByRole('button', { name: 'Spule', exact: true }).click();
   await dialog(page).getByLabel('Filamenttyp *').selectOption({ label: 'PLA' });
-  await dialog(page).getByLabel('Hersteller *').fill('Bambu Lab');
+  await dialog(page).getByLabel('Hersteller *').selectOption('Bambu Lab');
   await dialog(page).getByLabel('Farbe *').fill('Galaxy Blau');
   await dialog(page).getByLabel('Art / Finish').selectOption({ label: 'Silk' });
   await dialog(page).getByLabel('Preis pro Spule (€)').fill('20');

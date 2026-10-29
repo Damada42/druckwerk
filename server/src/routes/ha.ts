@@ -15,6 +15,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { schema, type Db } from '../db/index.js';
 import { HaError, spoolInSlot, type HaClient } from '../ha/client.js';
 import { parseId } from './crud.js';
+import { prepareSpool } from './manufacturers.js';
 
 export function registerHaRoutes(app: FastifyInstance, db: Db, ha: HaClient) {
   const printerById = (id: string) =>
@@ -279,18 +280,24 @@ export function registerHaRoutes(app: FastifyInstance, db: Db, ha: HaClient) {
           .run();
         return tx
           .insert(schema.filamentSpools)
-          .values({
-            typeId,
-            manufacturer: guess.manufacturer ?? slot.name?.split(' ')[0] ?? 'Unbekannt',
-            colorName: colorNameFromHex(slot.color) ?? 'Unbekannt',
-            colorHex: slot.color ?? '#cccccc',
-            finishId: finishes.find((f) => f.name === finishName)?.id ?? null,
-            weightTotalG: total,
-            weightRemainingG:
-              slot.remain === null ? total : Math.round((total * slot.remain) / 100),
-            haTrayEntity: entityId,
-            notes: `Aus AMS ${slot.label} übernommen (${slot.name ?? slot.type})`,
-          })
+          .values(
+            prepareSpool(
+              db,
+              {
+                typeId,
+                manufacturer: guess.manufacturer ?? slot.name?.split(' ')[0] ?? 'Unbekannt',
+                colorName: colorNameFromHex(slot.color) ?? 'Unbekannt',
+                colorHex: slot.color ?? '#cccccc',
+                finishId: finishes.find((f) => f.name === finishName)?.id ?? null,
+                weightTotalG: total,
+                weightRemainingG:
+                  slot.remain === null ? total : Math.round((total * slot.remain) / 100),
+                haTrayEntity: entityId,
+                notes: `Aus AMS ${slot.label} übernommen (${slot.name ?? slot.type})`,
+              },
+              true,
+            ) as typeof schema.filamentSpools.$inferInsert,
+          )
           .returning()
           .get();
       });

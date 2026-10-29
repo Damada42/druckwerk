@@ -1,4 +1,9 @@
-import { DEFAULT_SETTINGS, storageSubtree, type AppSettings } from '@3dapp/shared';
+import {
+  DEFAULT_SETTINGS,
+  LOW_STOCK_GROUP_LABELS,
+  storageSubtree,
+  type AppSettings,
+} from '@3dapp/shared';
 import { asc, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../db/index.js';
@@ -12,7 +17,7 @@ export function readSettings(db: Db): AppSettings {
   const result: AppSettings = { ...DEFAULT_SETTINGS };
   for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof AppSettings)[]) {
     const row = rows.find((r) => r.key === key);
-    if (row) result[key] = JSON.parse(row.value);
+    if (row) (result as unknown as Record<string, unknown>)[key] = JSON.parse(row.value);
   }
   return result;
 }
@@ -26,6 +31,8 @@ export function registerStorageRoutes(app: FastifyInstance, db: Db) {
     for (const [key, value] of Object.entries(body)) {
       if (!(key in DEFAULT_SETTINGS)) continue;
       if (typeof value !== typeof DEFAULT_SETTINGS[key as keyof AppSettings])
+        return reply.code(400).send({ error: `Ungültiger Wert für ${key}` });
+      if (key === 'lowStockGroup' && !Object.hasOwn(LOW_STOCK_GROUP_LABELS, value as string))
         return reply.code(400).send({ error: `Ungültiger Wert für ${key}` });
       db.insert(settings)
         .values({ key, value: JSON.stringify(value) })
