@@ -21,7 +21,9 @@ Requires Node 22+. On this Windows machine, PowerShell calls may need the PATH r
 Tooling on this machine:
 
 - There is no Python and no `gh` CLI. Use Node for scripts. CI status can only be seen on GitHub (Actions tab).
-- `core.autocrlf=true`, and the working tree mixes CRLF and LF files. Prettier writes LF, so it can make untouched files show up in `git status`. Check them with `git diff --ignore-cr-at-eol` and `git checkout` the ones without real changes. String replacements in scripts must handle `\r\n`.
+- `core.autocrlf=true`, and the working tree mixes CRLF and LF files. Prettier writes LF, so it can make untouched files show up in `git status`. Check them with `git diff --ignore-cr-at-eol` and `git checkout` the ones without real changes. Take the file list from `git status`, because `git diff --name-only` leaves out files whose only change is line endings. String replacements in scripts must handle `\r\n`.
+- Edit scripts that contain backticks or `${…}` get mangled inside `node -e "…"`. Write them to a file in the scratchpad and run that, or use the Edit tool.
+- The built-in browser rejects the self-signed certificate (`ERR_CERT_AUTHORITY_INVALID`). To check the UI there, start the `druckwerk-prod-http` config from `.claude/launch.json` (`HTTPS=false npm run prod`, http://localhost:3000). The Vite dev server can't run without HTTPS, because its proxy targets `https://localhost:3000`. Both use the local `server/data` database, so new migrations run on it: back it up first (see `db:generate` above).
 
 Env vars: `API_PORT` (default 3000; deliberately not `PORT`, which the preview tooling sets), `HOST`, `DATA_DIR` (default `server/data`: DB, uploads, certs, `client-log.jsonl`), `HTTPS=false` to disable TLS, `HA_POLL_MS` (default 20000; the e2e server uses 500), `TRUST_PROXY=true` behind a reverse proxy. `NODE_ENV=production` (set by `npm start`) makes the server serve `client/dist`.
 
@@ -120,6 +122,8 @@ React 19, Vite 7, Tailwind v4 (tokens in `index.css`), React Router 7 and TanSta
   - `barcode.ts` prefers the browser's native `BarcodeDetector` (secure context only; present on Android, absent on desktop Chrome/Windows) with ZXing as a fallback.
   - `live.ts` grabs video frames into a canvas (2× zoom, manual focus sweep when the camera only offers manual focus). Code 128 must be read twice identically; ITF and Code 39 are excluded because blurry frames produced false reads.
   - The user's phone gives the browser no autofocus (`focusMode: ["manual"]`), so live frames stay blurry there. The dialog detects this, remembers it in localStorage (`druckwerk.scan.noAutofocus`) and switches the barcode button to the photo path (camera app with autofocus), which works reliably.
+  - In the HA Companion app (`IN_HA_APP`, "Home Assistant/" in the user agent) a file input with `capture` opens only the gallery/photo picker, never the camera. There the dialog stays with the live scanner even without autofocus (the WebView on the user's Galaxy S25+ reports `focusMode: ["manual"]`, so the focus sweep does the work) and labels the photo paths as gallery.
+  - A barcode without a remembered product (live or photo) gets the label read too: `withLabel` runs OCR on the same image (the live scanner hands over the full frame on a hit), so the form is prefilled from the box print.
   - When several codes are in a photo, EAN/UPC wins over QR. QR codes that are only a manufacturer URL count as `generic`: the manufacturer comes from the domain and "Sorte merken" defaults off.
   - `ocr.ts` `recognizeText` runs tesseract.js (deu + eng; language data comes from the CDN).
   - `invoice.ts` `readInvoiceText` reads PDFs with pdfjs-dist. It regroups text items into lines by y position so table rows like "Gesamtbetrag … 35,65 €" stay together. It falls back to OCR of page 1 for scanned PDFs and photos. The invoices tab in `ProjectDetail.tsx` prefills only fields the user hasn't touched.

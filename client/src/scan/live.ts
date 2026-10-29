@@ -101,7 +101,8 @@ const SWEEP_MS = 450;
  */
 export async function startLiveScan(
   video: HTMLVideoElement,
-  onCode: (code: string, format: string) => void,
+  /** frame: das ganze Bild beim Treffer, z.B. um das Etikett daneben zu lesen */
+  onCode: (code: string, format: string, frame: HTMLCanvasElement) => void,
   onStats?: (stats: LiveStats) => void,
 ): Promise<LiveScan> {
   // HD statt Standard-VGA: feine Striche von EAN-Codes brauchen Auflösung
@@ -145,10 +146,20 @@ export async function startLiveScan(
     stream.getTracks().forEach((t) => t.stop());
     video.srcObject = null;
   };
+  /** Ganzes Videobild als eigenes Canvas (bis 1600 px), bevor die Kamera ausgeht */
+  const snapshot = () => {
+    const frame = document.createElement('canvas');
+    const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
+    frame.width = Math.round(video.videoWidth * scale);
+    frame.height = Math.round(video.videoHeight * scale);
+    frame.getContext('2d')!.drawImage(video, 0, 0, frame.width, frame.height);
+    return frame;
+  };
   const found = (code: string, format: string) => {
     if (stopped) return;
+    const frame = snapshot();
     stopStream();
-    onCode(code, format);
+    onCode(code, format, frame);
   };
   let candidate: { code: string; at: number } | undefined;
   /** true, wenn der Code übernommen werden kann (zuverlässiges Format oder bestätigt) */

@@ -2,7 +2,7 @@ import { manufacturerFromUrl, parseSpoolLabel, type LabelGuess } from '@3dapp/sh
 import type { LiveScan } from '../scan/live';
 import { Camera, Keyboard, ScanBarcode, ScanText } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useList } from '../api';
+import { api, useList } from '../api';
 import { clientLog, errorInfo } from '../clientLog';
 import { Button, ErrorText, Field, Modal, TextInput } from '../components/ui';
 import { canUseLiveCamera } from '../scan/image';
@@ -42,9 +42,14 @@ export function ScanDialog({
   const live = canUseLiveCamera();
   // Handys ohne Autofokus im Browser: dort ist das Foto (Kamera-App mit Autofokus) zuverlässiger
   const [noAutofocus, setNoAutofocus] = useState(() => readFlag(NO_AUTOFOCUS));
-  const preferLive = live && !noAutofocus;
+  // Die Home-Assistant-App öffnet für Fotos nur die Galerie, nicht die Kamera – dort bleibt es
+  // beim Live-Scanner
+  const preferLive = live && (!noAutofocus || IN_HA_APP);
 
-  useEffect(() => clientLog('scan-open', { live, noAutofocus }), [live, noAutofocus]);
+  useEffect(
+    () => clientLog('scan-open', { live, noAutofocus, haApp: IN_HA_APP }),
+    [live, noAutofocus],
+  );
 
   /**
    * QR-Codes mancher Hersteller enthalten Klartext oder eine Adresse mit Material/Farbe –
@@ -72,8 +77,59 @@ export function ScanDialog({
     const found = Object.values(guess).some((v) => v !== undefined);
     return { barcode: code, ...(found && { guess, text }), ...(generic && { generic }) };
   };
+
+  /**
+   * Etikett lesen (Texterkennung) und daraus Typ, Hersteller, Farbe … vorschlagen. Lädt beim
+   * ersten Mal die Sprachdaten.
+   */
+  const readLabel = async (image: HTMLCanvasElement) => {
+    const { recognizeText } = await import('../scan/ocr');
+    const text = await recognizeText(image, (pct) => {
+      setStatus('Erkenne Text…');
+      setProgress(pct);
+    });
+    const guess = parseSpoolLabel(text, {
+      types: types.map((t) => t.name),
+      finishes: finishes.map((f) => f.name),
+      manufacturers: [...new Set(spools.map((s) => s.manufacturer))],
+    });
+    const found = Object.values(guess).some((v) => v !== undefined);
+    clientLog('scan-ocr', {
+      chars: text.length,
+      recognized: Object.keys(guess).filter((k) => guess[k as keyof LabelGuess] !== undefined),
+      sample: text.slice(0, 200),
+    });
+    return { guess, text, found };
+  };
+
+  /**
+   * Neuer Barcode ohne Angaben: das Etikett auf demselben Bild gleich mitlesen, damit das
+   * Formular nicht leer bleibt. Bekannte Barcodes kommen ohnehin aus der gemerkten Sorte.
+   */
+  const withLabel = async (result: ScanResult, image: HTMLCanvasElement) => {
+    if (!result.barcode || result.guess) return result;
+    try {
+      const lookup = await api.get<{ product: unknown }>(
+        `/barcodes/${encodeURIComponent(result.barcode)}`,
+      );
+      if (lookup.product) return result;
+      setStatus(
+        'Neuer Barcode – lese das Etikett mit… (beim ersten Mal werden Sprachdaten geladen)',
+      );
+      setProgress(0);
+      const { guess, text, found } = await readLabel(image);
+      return found ? { ...result, guess, text } : result;
+    } catch (e) {
+      // Ohne Etikett geht es trotzdem weiter: der Barcode allein reicht zum Anlegen
+      clientLog('scan-error', { stage: 'barcode-label', ...errorInfo(e) });
+      return result;
+    }
+  };
+
   const resultForRef = useRef(resultFor);
   resultForRef.current = resultFor;
+  const withLabelRef = useRef(withLabel);
+  withLabelRef.current = withLabel;
 
   // Live-Kamera starten/stoppen
   const liveScan = useRef<LiveScan | null>(null);
@@ -86,9 +142,16 @@ export function ScanDialog({
       .then(({ startLiveScan }) =>
         startLiveScan(
           video.current!,
-          (code, format) => {
+          async (code, format, frame) => {
             clientLog('scan-live-found', { code, format, ms: Date.now() - startedAt });
-            onResult(resultForRef.current(code));
+            setMode('working');
+            setStatus('Barcode erkannt…');
+            const { release } = await import('../scan/image');
+            try {
+              onResult(await withLabelRef.current(resultForRef.current(code), frame));
+            } finally {
+              release(frame);
+            }
           },
           (stats) => clientLog('scan-live-stats', { ...stats }),
         ),
@@ -165,7 +228,7 @@ export function ScanDialog({
       // Groß genug, dass auch kleine QR-Codes auf Etiketten lesbar bleiben
       image = await prepare(file, 'barcode', 2400);
       const code = await decode(image, 'barcode');
-      if (code) onResult(resultFor(code));
+      if (code) onResult(await withLabel(resultFor(code), image));
       else
         fail(
           'Kein Barcode oder QR-Code erkannt. Näher rangehen, scharf stellen und gerade fotografieren.',
@@ -189,22 +252,7 @@ export function ScanDialog({
       image = await prepare(file, 'label', 1600);
       // Nacheinander statt gleichzeitig, damit der Speicher auf schwächeren Handys reicht
       const code = await decode(image, 'label');
-      const { recognizeText } = await import('../scan/ocr');
-      const text = await recognizeText(image, (pct) => {
-        setStatus('Erkenne Text…');
-        setProgress(pct);
-      });
-      const guess = parseSpoolLabel(text, {
-        types: types.map((t) => t.name),
-        finishes: finishes.map((f) => f.name),
-        manufacturers: [...new Set(spools.map((s) => s.manufacturer))],
-      });
-      const found = Object.values(guess).some((v) => v !== undefined);
-      clientLog('scan-ocr', {
-        chars: text.length,
-        recognized: Object.keys(guess).filter((k) => guess[k as keyof LabelGuess] !== undefined),
-        sample: text.slice(0, 200),
-      });
+      const { guess, text, found } = await readLabel(image);
       if (!found && !code) {
         return fail(
           'Auf dem Foto wurde nichts Brauchbares erkannt. Etikett gut ausleuchten und formatfüllend fotografieren.',
@@ -259,7 +307,11 @@ export function ScanDialog({
             <Choice
               icon={<ScanText size={26} />}
               title="Etikett fotografieren"
-              text="Text wird erkannt und vorausgefüllt"
+              text={
+                IN_HA_APP
+                  ? 'Foto aus der Galerie – Text wird erkannt und vorausgefüllt'
+                  : 'Text wird erkannt und vorausgefüllt'
+              }
               onClick={() => pick(labelInput.current)}
             />
           </div>
@@ -269,7 +321,11 @@ export function ScanDialog({
               className="text-sm text-accent hover:underline"
               onClick={() => (preferLive ? pick(barcodeInput.current) : setMode('live'))}
             >
-              {preferLive ? 'Barcode lieber als Foto aufnehmen' : 'Live-Scanner trotzdem versuchen'}
+              {preferLive
+                ? IN_HA_APP
+                  ? 'Barcode-Foto aus der Galerie wählen'
+                  : 'Barcode lieber als Foto aufnehmen'
+                : 'Live-Scanner trotzdem versuchen'}
             </button>
           )}
           <form
@@ -307,7 +363,13 @@ export function ScanDialog({
             <video ref={video} className="aspect-[4/3] w-full object-cover" muted playsInline />
             <div className="pointer-events-none absolute inset-x-8 top-1/2 h-32 -translate-y-1/2 rounded-lg border-2 border-white/80" />
           </div>
-          {noAutofocus ? (
+          {noAutofocus && IN_HA_APP ? (
+            <p className="rounded-lg border border-line bg-surface-2 p-3 text-sm">
+              Die Home-Assistant-App lässt die Kamera nicht selbst scharfstellen. Der Scanner fährt
+              die Schärfe deshalb durch – Code ruhig in den Rahmen halten, etwa 15–20 cm entfernt,
+              oder mit dem Regler scharfstellen.
+            </p>
+          ) : noAutofocus ? (
             <div className="space-y-2 rounded-lg border border-line bg-surface-2 p-3 text-sm">
               <p>
                 Dein Handy lässt den Browser nicht automatisch scharfstellen – das Live-Bild bleibt
@@ -354,7 +416,7 @@ export function ScanDialog({
                 pick(barcodeInput.current);
               }}
             >
-              <Camera size={16} /> Foto stattdessen
+              <Camera size={16} /> {IN_HA_APP ? 'Galerie' : 'Foto stattdessen'}
             </Button>
           </div>
         </div>
@@ -402,6 +464,9 @@ function Choice({
 }
 
 const NO_AUTOFOCUS = 'druckwerk.scan.noAutofocus';
+
+/** In der Home-Assistant-App (Android/iOS) statt im Browser – sie meldet sich im User-Agent */
+const IN_HA_APP = typeof navigator !== 'undefined' && /Home ?Assistant\//.test(navigator.userAgent);
 
 /** Merker im Browser – darf fehlen (privater Modus, gesperrter Speicher) */
 function readFlag(key: string) {

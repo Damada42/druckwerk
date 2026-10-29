@@ -217,3 +217,34 @@ test('Etikett-Foto: Texterkennung füllt Typ, Hersteller, Farbe, Finish und Gewi
   await d.getByRole('button', { name: 'Spule anlegen' }).click();
   await expect(d.getByText('1 Spule angelegt')).toBeVisible();
 });
+
+test('Neuer Barcode: das Etikett daneben wird gleich mitgelesen', async ({ page }) => {
+  test.setTimeout(120_000);
+  // Karton mit Barcode und Aufdruck – wie die Bambu- oder Sunlu-Schachtel
+  const code = await barcodePhoto('5901234123457');
+  const box = await page.context().newPage();
+  await box.setViewportSize({ width: 900, height: 640 });
+  await box.setContent(`
+    <body style="margin:0;background:#fff;font-family:Arial,sans-serif;color:#111">
+      <div style="padding:32px 56px">
+        <div style="font-size:54px;font-weight:700">Sunlu</div>
+        <div style="font-size:46px;margin-top:8px">PLA Beige</div>
+        <div style="font-size:32px;margin-top:8px">1KG 1.75mm</div>
+        <img style="margin-top:24px" src="data:image/png;base64,${code.buffer.toString('base64')}" />
+      </div>
+    </body>`);
+  const buffer = await box.screenshot();
+  await box.close();
+
+  await openScanner(page);
+  await page
+    .getByTestId('barcode-photo')
+    .setInputFiles({ name: 'karton.png', mimeType: 'image/png', buffer });
+  const d = dialog(page);
+  await expect(d.getByText('Neuer Barcode 5901234123457', { exact: false })).toBeVisible({
+    timeout: 90_000,
+  });
+  await expect(d.getByLabel(/^Hersteller/)).toHaveValue('Sunlu');
+  await expect(d.getByLabel(/^Farbe/)).toHaveValue('Beige');
+  await expect(d.getByLabel(/^Filamenttyp/).locator('option:checked')).toHaveText('PLA');
+});

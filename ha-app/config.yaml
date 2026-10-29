@@ -2,7 +2,7 @@
 # ghcr.io/damada42/druckwerk:<version> – die Version hier muss es dort geben (GitHub Actions
 # taggt das Image mit dieser Version). Für ein Update in HA: Version erhöhen und pushen.
 name: Druckwerk
-version: '0.6.0'
+version: '0.6.1'
 slug: druckwerk
 description: 3D-Druck-Manager – Projekte, Filament, Drucker mit Live-Status und Kameras
 url: https://github.com/Damada42/druckwerk
