@@ -207,6 +207,8 @@ export function ProjectsPage() {
           onDragStart={onDragStart}
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}
+          // Am Handy langsam weiterscrollen, sonst schießt man über „In Arbeit“ hinaus bis „Erledigt“
+          autoScroll={{ acceleration: 2, threshold: { x: 0.12, y: 0.2 } }}
           onDragCancel={() => {
             setActiveId(null);
             setDragCols(null);
@@ -215,7 +217,7 @@ export function ProjectsPage() {
           {/* Beim Ziehen kein Einrasten, sonst kämpft es mit dem automatischen Scrollen zur Zielspalte */}
           <div
             className={cx(
-              '-mx-4 flex gap-4 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0',
+              '-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:gap-4 md:grid-cols-3 md:overflow-visible md:px-0',
               !activeId && 'snap-x snap-mandatory',
             )}
           >
@@ -278,7 +280,7 @@ function Column({
     <section
       ref={setNodeRef}
       className={cx(
-        'flex w-[85%] shrink-0 snap-start flex-col gap-2.5 rounded-xl border border-line bg-surface-2 p-3 md:w-auto',
+        'flex w-[72%] shrink-0 snap-start flex-col gap-2.5 rounded-xl border border-line bg-surface-2 p-3 md:w-auto',
         isOver && 'border-accent/60',
       )}
     >

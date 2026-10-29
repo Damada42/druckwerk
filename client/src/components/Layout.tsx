@@ -3,6 +3,7 @@ import {
   Cylinder,
   KanbanSquare,
   LayoutDashboard,
+  Menu,
   Printer,
   Settings,
   Users,
@@ -10,7 +11,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { AppSettings } from '@3dapp/shared';
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useSettings } from '../api';
 import { cx } from './ui';
 
@@ -56,11 +58,17 @@ export const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-/** Auf dem Handy passen nicht alle Punkte in die untere Leiste (Lager über die Filament-Seite) */
-const NOT_ON_MOBILE = new Set(['/einstellungen', '/personen', '/lager']);
+/** Auf dem Handy passen nicht alle Punkte in die untere Leiste – diese stehen unter „Mehr“ */
+const MORE_ON_MOBILE = new Set(['/einstellungen', '/personen', '/lager']);
 
 export function Layout() {
   const navItems = useNavItems();
+  const more = navItems.filter((n) => MORE_ON_MOBILE.has(n.to));
+  const [moreOpen, setMoreOpen] = useState(false);
+  const { pathname } = useLocation();
+  // Menü beim Seitenwechsel schließen
+  useEffect(() => setMoreOpen(false), [pathname]);
+  const moreActive = more.some((n) => pathname.startsWith(n.to));
   return (
     <div className="flex min-h-dvh">
       <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-line bg-surface px-3 py-5 md:flex">
@@ -94,9 +102,40 @@ export function Layout() {
         <Outlet />
       </main>
 
+      {moreOpen && (
+        <div className="fixed inset-0 z-40 md:hidden" onClick={() => setMoreOpen(false)}>
+          <div
+            id="mehr-menue"
+            role="menu"
+            aria-label="Mehr"
+            className="absolute right-2 bottom-[calc(4rem+env(safe-area-inset-bottom))] w-56 rounded-xl border border-line bg-surface p-1.5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {more.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                role="menuitem"
+                className={({ isActive }) =>
+                  cx(
+                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium',
+                    isActive
+                      ? 'bg-accent-soft text-accent-strong dark:text-orange-300'
+                      : 'hover:bg-surface-2',
+                  )
+                }
+              >
+                <Icon size={18} />
+                {label}
+              </NavLink>
+            ))}
+          </div>
+        </div>
+      )}
+
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
         {navItems
-          .filter((n) => !NOT_ON_MOBILE.has(n.to))
+          .filter((n) => !MORE_ON_MOBILE.has(n.to))
           .map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
@@ -113,6 +152,21 @@ export function Layout() {
               {label}
             </NavLink>
           ))}
+        {more.length > 0 && (
+          <button
+            type="button"
+            aria-expanded={moreOpen}
+            aria-controls="mehr-menue"
+            onClick={() => setMoreOpen((o) => !o)}
+            className={cx(
+              'flex flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium',
+              moreActive || moreOpen ? 'text-accent' : 'text-muted',
+            )}
+          >
+            <Menu size={20} />
+            Mehr
+          </button>
+        )}
       </nav>
     </div>
   );

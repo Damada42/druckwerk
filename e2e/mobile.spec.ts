@@ -122,3 +122,32 @@ test('Handy: Karte per Finger von „In Arbeit“ nach „Erledigt“ ziehen', a
     )
     .toBe('done');
 });
+
+test('Handy: „Mehr“ in der unteren Leiste führt zu Einstellungen und Team', async ({ page }) => {
+  await page.goto('/');
+  const bottomNav = page.locator('nav').last();
+  await bottomNav.getByRole('button', { name: 'Mehr' }).click();
+  const menu = page.getByRole('menu', { name: 'Mehr' });
+  await menu.getByRole('menuitem', { name: 'Einstellungen' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Einstellungen' })).toBeVisible();
+  // Menü schließt beim Seitenwechsel, „Mehr“ bleibt markiert
+  await expect(menu).toBeHidden();
+  await expect(bottomNav.getByRole('button', { name: 'Mehr' })).toHaveClass(/text-accent/);
+  await bottomNav.getByRole('button', { name: 'Mehr' }).click();
+  await page.getByRole('menuitem', { name: 'Team' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Team' })).toBeVisible();
+  await expectNoHorizontalScroll(page);
+});
+
+test('Handy: Kostenvergleich passt ohne seitliches Scrollen', async ({ page }) => {
+  await page.goto('/drucker');
+  const table = page.getByRole('table');
+  await expect(table).toBeVisible();
+  const overflow = await table.evaluate(
+    (el) => (el.parentElement?.scrollWidth ?? 0) - (el.parentElement?.clientWidth ?? 0),
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+  const total = table.getByRole('row', { name: /Summe pro Druckstunde/ });
+  await total.scrollIntoViewIfNeeded();
+  await expect(total).toBeInViewport({ ratio: 1 });
+});

@@ -1,9 +1,77 @@
 # Druckwerk – 3D-Druck-Manager
 
-Web-App (PWA) zum Verwalten von 3D-Druck-Projekten: Kanban-Board, Kunden, Team, Filament-Bestand und Drucker.
-Läuft als kleiner Server im Heimnetz; PC und Handy greifen auf dieselben Daten zu.
+Web-App (PWA) zum Verwalten von 3D-Druck-Projekten: Kanban-Board, Kunden, Team, Filament-Bestand mit
+Barcode-Scan, Rechnungen, Angebote als PDF und Drucker mit Live-Status über Home Assistant. PC und Handy
+greifen auf dieselben Daten zu.
 
-## Starten
+Druckwerk lässt sich auf drei Arten betreiben – es ist immer dasselbe Programm (dasselbe Docker-Image):
+
+| Weg                                                                 | Wofür                                  | Anmeldung                          |
+| ------------------------------------------------------------------- | -------------------------------------- | ---------------------------------- |
+| [Home-Assistant-App](#als-home-assistant-app-empfohlen) (empfohlen) | Alltag, mit HA OS                      | Home Assistant                     |
+| [Docker-Container](#alternativ-docker-auf-dem-homeserver)           | Homeserver ohne HA OS, z.B. Portainer  | Login-Proxy davor (z.B. Authentik) |
+| [Direkt mit Node](#entwicklung-und-betrieb-direkt-mit-node)         | Entwicklung, Test am Handy im Heimnetz | keine                              |
+
+Druckwerk hat **keine eigene Anmeldung**. Es darf daher nur über Home Assistant, hinter einem
+Login-Proxy oder im Heimnetz laufen – **nie ungeschützt ins Internet stellen**.
+
+## Als Home-Assistant-App (empfohlen)
+
+1. In Home Assistant **Einstellungen → Apps → App Store**, oben rechts **⋮ → Repositories** und
+   `https://github.com/Damada42/druckwerk` hinzufügen.
+2. **Druckwerk** installieren, starten und „In Seitenleiste anzeigen“ einschalten.
+3. Druckwerk öffnet sich über die Seitenleiste, am Handy in der Home-Assistant-App – auch von
+   unterwegs (z.B. über Nabu Casa).
+
+Die Verbindung zu diesem Home Assistant besteht automatisch, ohne Token. Weitere Standorte lassen sich
+in den Einstellungen mit Adresse und langlebigem Zugriffstoken hinzufügen. Datenbank und Rechnungen
+liegen in der Samba-Freigabe **addon_configs** (`…_druckwerk`) und sind Teil der Home-Assistant-Backups.
+
+Details, Datenumzug aus dem Docker-Container und Hinweise: [`ha-app/DOCS.md`](ha-app/DOCS.md).
+
+**Updates:** Die Version in `ha-app/config.yaml` erhöhen und auf `main` pushen. GitHub Actions baut das
+Image mit dieser Version, danach bietet Home Assistant unter Einstellungen → Apps das Update an.
+
+## Alternativ: Docker auf dem Homeserver
+
+Druckwerk läuft als Container, Cloudflare-Tunnel und Authentik-Outpost davor sorgen für HTTPS und Login
+(mit MFA).
+
+```
+Handy ─HTTPS─▶ Cloudflare ─Tunnel─▶ Authentik-Outpost ─HTTP─▶ Druckwerk-Container (:3000)
+```
+
+1. **Image:** Bei jedem Push auf `main` baut GitHub Actions (`.github/workflows/docker.yml`) nach den Tests
+   das Image `ghcr.io/<github-name>/druckwerk:latest` (privat).
+2. **Portainer:** Unter _Registries_ `ghcr.io` mit GitHub-Name und einem Token (classic, Recht
+   `read:packages`) anlegen. Dann _Stacks → Add stack_, Inhalt von `docker-compose.yml` einfügen
+   und deployen. Updates: im Stack _Pull and redeploy_.
+3. **Authentik:** Provider _Proxy_ (Modus „Proxy“) mit External host `https://druckwerk.<domain>` und
+   Internal host `http://<Server-IP>:3100`, dazu eine Application und beides dem Outpost zuweisen.
+4. **Cloudflare:** Im Tunnel einen Public Hostname `druckwerk.<domain>` auf den Outpost legen – wie bei
+   den anderen Diensten.
+5. **Daten umziehen** (falls vorhanden): Am PC `npm run export -w server` (geht bei laufendem Server) und
+   den erzeugten Ordner `server/data/export/druckwerk-…` auf den Server kopieren. Dort den Container
+   **stoppen** und die Daten mit einem Hilfscontainer ins Volume legen – die alten Datenbankdateien
+   müssen weg, sonst spielt SQLite die `-wal`-Datei der leeren Start-Datenbank in die kopierte ein:
+
+   ```bash
+   docker run --rm -v druckwerk_druckwerk-data:/data -v /pfad/zum/druckwerk-…:/import alpine sh -c "rm -f /data/3dapp.db*; cp -r /import/. /data/"
+   ```
+
+   Dann den Container wieder starten. Den Volume-Namen zeigt Portainer unter _Volumes_ (Stack-Name +
+   `_druckwerk-data`). Danach den Server am PC beenden, sonst bucht auch er weiter Filament ab.
+
+6. **Home Assistant:** In den Einstellungen eine Verbindung mit der lokalen Adresse
+   (`http://<HA-IP>:8123`) und einem langlebigen Zugriffstoken anlegen – schneller und unabhängig vom
+   Internet. Bei übernommenen Daten genügt es, die Adresse zu ändern.
+7. **Handy:** `https://druckwerk.<domain>` öffnen, anmelden, im Menü „Zum Startbildschirm“ – mit dem echten
+   Zertifikat installiert sich Druckwerk als richtige App.
+
+Läuft die Anmeldung ab, lädt die App von selbst neu und landet beim Authentik-Login.
+**Backup:** das Volume `…_druckwerk-data` sichern.
+
+## Entwicklung und Betrieb direkt mit Node
 
 Voraussetzung: [Node.js](https://nodejs.org) 22 oder neuer.
 
@@ -19,33 +87,30 @@ npm run dev
 
 Dann im Browser `https://localhost:5173` öffnen – vom Handy aus `https://<IP-des-PCs>:5173`.
 
-**Dauerbetrieb** (eine Adresse für alles, Port 3000):
+**Wie im Betrieb** (Oberfläche bauen und alles über eine Adresse auf Port 3000 ausliefern – am besten
+zum Testen am Handy):
 
 ```bash
-npm run build
-```
-
-```bash
-npm start
+npm run prod
 ```
 
 Danach ist die App unter `https://<IP-des-PCs>:3000` erreichbar.
 
 ### HTTPS im Heimnetz
 
-Die App läuft über **HTTPS**, weil Handy-Browser die Live-Kamera (Barcode-Scanner) nur über eine
-sichere Verbindung freigeben. Beim ersten Start erzeugt sie ein eigenes Zertifikat für `localhost`, den
-Rechnernamen und die Netzwerk-IP (`server/data/certs/tls.json`, gültig 825 Tage). Ändert sich die IP,
-wird es automatisch neu erstellt.
+Ohne Proxy davor läuft die App über **HTTPS**, weil Handy-Browser die Live-Kamera (Barcode-Scanner) nur
+über eine sichere Verbindung freigeben. Beim ersten Start erzeugt sie ein eigenes Zertifikat für
+`localhost`, den Rechnernamen und die Netzwerk-IP (`server/data/certs/tls.json`, gültig 825 Tage). Ändert
+sich die IP, wird es automatisch neu erstellt.
 
 - Beim **ersten Aufruf** zeigt jeder Browser eine Warnung („Verbindung ist nicht privat“), weil das
   Zertifikat nicht von einer offiziellen Stelle stammt. Einmal mit **„Erweitert → Trotzdem fortfahren“**
   bestätigen.
-- Die Adresse muss mit **`https://`** beginnen; `http://` antwortet nicht mehr.
+- Die Adresse muss mit **`https://`** beginnen; `http://` antwortet nicht.
 - Mit selbst erstelltem Zertifikat lässt sich die App nicht als PWA installieren (Browser verlangen
   dafür ein offizielles Zertifikat). Im Browser funktioniert alles normal; ein Lesezeichen auf dem
   Startbildschirm geht trotzdem.
-- HTTPS abschalten: `HTTPS=false` setzen.
+- HTTPS abschalten: `HTTPS=false` setzen (so läuft auch der Container hinter dem Proxy).
 
 | Variable      | Standard      | Bedeutung                              |
 | ------------- | ------------- | -------------------------------------- |
@@ -56,54 +121,8 @@ wird es automatisch neu erstellt.
 | `HA_POLL_MS`  | `20000`       | Abfrage-Intervall Home Assistant (ms)  |
 | `TRUST_PROXY` | `false`       | `true` hinter einem Reverse-Proxy      |
 
-**Backup:** Den Ordner `server/data` sichern (enthält `3dapp.db` und alle hochgeladenen Rechnungen).
-
-## Betrieb auf dem Homeserver (Docker, von unterwegs über Authentik)
-
-Druckwerk läuft als Container, Cloudflare-Tunnel und Authentik-Outpost davor sorgen für HTTPS und Login
-(mit MFA). Druckwerk selbst hat keine Anmeldung – **nie ohne Login-Proxy ins Internet stellen**.
-
-```
-Handy ─HTTPS─▶ Cloudflare ─Tunnel─▶ Authentik-Outpost ─HTTP─▶ Druckwerk-Container (:3000)
-```
-
-1. **Image:** Bei jedem Push auf `main` baut GitHub Actions (`.github/workflows/docker.yml`) nach den Tests
-   das Image `ghcr.io/<github-name>/druckwerk:latest` (privat).
-2. **Portainer:** Unter _Registries_ `ghcr.io` mit GitHub-Name und einem Token (classic, Recht
-   `read:packages`) anlegen. Dann _Stacks → Add stack_, Inhalt von `docker-compose.yml` einfügen
-   und deployen. Updates: im Stack _Pull and redeploy_.
-3. **Authentik:** Provider _Proxy_ (Modus „Proxy“) mit External host `https://druckwerk.<domain>` und
-   Internal host `http://<Server-IP>:3100`, dazu eine Application und beides dem Outpost zuweisen.
-4. **Cloudflare:** Im Tunnel einen Public Hostname `druckwerk.<domain>` auf den Outpost legen – wie bei
-   deinen anderen Diensten.
-5. **Daten umziehen:** Am PC `npm run export -w server` (geht bei laufendem Server) und den erzeugten
-   Ordner `server/data/export/druckwerk-…` auf den Server kopieren. Dort den Container **stoppen** und
-   die Daten mit einem Hilfscontainer ins Volume legen – die alten Datenbankdateien müssen weg, sonst
-   spielt SQLite die `-wal`-Datei der leeren Start-Datenbank in die kopierte ein:
-
-   ```bash
-   docker run --rm -v druckwerk_druckwerk-data:/data -v /pfad/zum/druckwerk-…:/import alpine sh -c "rm -f /data/3dapp.db*; cp -r /import/. /data/"
-   ```
-
-   Dann den Container wieder starten. Den Volume-Namen zeigt Portainer unter _Volumes_ (Stack-Name +
-   `_druckwerk-data`). Danach den Server am PC beenden, sonst bucht auch er weiter Filament ab.
-
-6. **Home Assistant:** In den Einstellungen die Adresse auf die lokale (`http://<HA-IP>:8123`) ändern –
-   schneller und unabhängig vom Internet. Der Token bleibt.
-7. **Handy:** `https://druckwerk.<domain>` öffnen, anmelden, im Menü „Zum Startbildschirm“ – mit dem echten
-   Zertifikat installiert sich Druckwerk jetzt als richtige App.
-
-Läuft die Anmeldung ab, lädt die App von selbst neu und landet beim Authentik-Login.
-
-## Als Home-Assistant-App
-
-Druckwerk läuft auch direkt in Home Assistant (HA OS), mit Seitenleisten-Eintrag und HA-Login – ohne
-Authentik, Tunnel oder Token für das eigene HA. In HA unter **Einstellungen → Apps → App Store → ⋮ →
-Repositories** die Adresse dieses Repos eintragen und **Druckwerk** installieren. Details, Datenumzug
-und Hinweise: [`ha-app/DOCS.md`](ha-app/DOCS.md).
-
-Für ein Update in HA die Version in `ha-app/config.yaml` erhöhen und auf `main` pushen – GitHub Actions
-baut das Image mit dieser Version.
+**Backup:** Den Ordner `server/data` sichern (enthält `3dapp.db` samt `-wal`-Datei und alle
+hochgeladenen Rechnungen).
 
 ## Aufbau
 

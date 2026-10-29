@@ -27,9 +27,9 @@ Env vars: `API_PORT` (default 3000; deliberately not `PORT`, which the preview t
 
 ## Deployment
 
-- In production the app runs as a Docker container on the user's home server (Portainer, stack in `docker-compose.yml`, host port 3100). Every push to `main` triggers `.github/workflows/docker.yml`: it runs only `typecheck` and `npm test`, then publishes `ghcr.io/<owner>/druckwerk` tagged `latest`, the commit SHA and the version from `ha-app/config.yaml`. CI doesn't run the e2e suite, so run `npm run e2e` locally before pushing.
+- The main production setup is the Home Assistant App (next section). The alternative is a Docker container on the user's home server (Portainer, stack in `docker-compose.yml`, host port 3100); both use the same image. Every push to `main` triggers `.github/workflows/docker.yml`: it runs only `typecheck` and `npm test`, then publishes `ghcr.io/<owner>/druckwerk` tagged `latest`, the commit SHA and the version from `ha-app/config.yaml`. CI doesn't run the e2e suite, so run `npm run e2e` locally before pushing.
 - The Dockerfile's runtime stage copies only `shared/src`, `server/src`, `server/drizzle` and the built `client/dist`. A new runtime file outside those (e.g. a server-side fixture or asset) needs its own `COPY` line.
-- It sits behind Cloudflare Tunnel → Authentik proxy outpost (login with MFA). The container serves plain HTTP (`HTTPS=false`, `TRUST_PROXY=true`, data in `/data`).
+- The Docker container sits behind Cloudflare Tunnel → Authentik proxy outpost (login with MFA). The container serves plain HTTP (`HTTPS=false`, `TRUST_PROXY=true`, data in `/data`).
 - The app has no auth of its own, so it must never be exposed without the proxy.
 - Proxy constraints:
   - `request()` in `api.ts` fetches with `redirect: 'manual'`. An opaque redirect means the Authentik session expired, and the page reloads at most once a minute (`e2e/proxy.spec.ts`).
@@ -50,6 +50,7 @@ HA renamed add-ons to "Apps" in 2026.2; use that term with the user. The same Do
 - With `SUPERVISOR_TOKEN` set (`supervisorToken` in `buildApp`):
   - The server only accepts requests from the ingress gateway `172.30.32.2` and from localhost (Docker healthcheck), since the app has no auth of its own.
   - `createHaClient` creates one `ha_connections` row with `local = true`. Its URL (`http://supervisor/core`) and token are resolved at runtime and never stored. It can be renamed but not removed. Without a supervisor token (data moved back to Docker), it reports an error and can be deleted.
+- User-facing docs: `README.md` describes the three setups in this order (HA App, Docker with Authentik, Node directly for development); `ha-app/DOCS.md` is the App's own page in HA. Keep the two consistent when the setup changes.
 - Data lives in `/config` (`addon_config` map), so it's reachable via Samba and included in HA backups. `backup_pre` runs `src/checkpoint.ts` to flush the SQLite WAL first.
 
 ## Architecture
@@ -110,7 +111,8 @@ React 19, Vite 7, Tailwind v4 (tokens in `index.css`), React Router 7 and TanSta
 - `src/api.ts` holds all data hooks (`useList`, `useSave`, an optimistic `useMoveProject`, …).
 - `components/ui.tsx` holds the shared primitives and German formatters (`euro`, `grams`, `dateDe`).
 - `ColorDot` draws on a `<canvas>` on purpose. Samsung Internet's forced dark mode recolors CSS backgrounds, SVG and even `<img>` swatches: large dots get darkened (white turned black), small ones lightened. Neither `<meta name="color-scheme">` nor `color-scheme: only light` stops this. A test page on the user's phone showed that canvas content stays untouched. Draw any new filament color swatch with `ColorDot`.
-- The Kanban board uses @dnd-kit with separate Mouse and Touch sensors (a PointerSensor gets cancelled by the browser's scroll on phones; touch drags start after a 250 ms press). After a drop the board keeps the new arrangement until the move is confirmed, otherwise the drop animation flies back to the old spot.
+- The Kanban board uses @dnd-kit with separate Mouse and Touch sensors (a PointerSensor gets cancelled by the browser's scroll on phones; touch drags start after a 250 ms press). After a drop the board keeps the new arrangement until the move is confirmed, otherwise the drop animation flies back to the old spot. On phones the columns are 72 % wide (the next one peeks in) and `autoScroll` uses `acceleration: 2`; the default speed overshot from "Offen" past "In Arbeit" to "Erledigt".
+- The mobile bottom bar shows five entries plus "Mehr", a menu for the items in `MORE_ON_MOBILE` (Team, Lager, Einstellungen) in `Layout.tsx`.
 - Scanning lives in `src/scan/` and `pages/ScanDialog.tsx` / `ScanSpoolForm.tsx`. These modules are lazy-loaded.
   - `barcode.ts` prefers the browser's native `BarcodeDetector` (secure context only; present on Android, absent on desktop Chrome/Windows) with ZXing as a fallback.
   - `live.ts` grabs video frames into a canvas (2× zoom, manual focus sweep when the camera only offers manual focus). Code 128 must be read twice identically; ITF and Code 39 are excluded because blurry frames produced false reads.
@@ -134,7 +136,7 @@ React 19, Vite 7, Tailwind v4 (tokens in `index.css`), React Router 7 and TanSta
 
 ## Context
 
-- Production: the user runs Druckwerk as a Home Assistant App (slug `570056f1_druckwerk`) and opens it on the phone in the HA Companion app (Android 10, same LAN or via Nabu Casa). New versions reach him only through a push to `main` plus a version bump in `ha-app/config.yaml`; HA then offers the update. The Portainer/Docker setup is the alternative.
+- Production: the user runs Druckwerk as a Home Assistant App (slug `570056f1_druckwerk`) and opens it on the phone in the HA Companion app (Android 10, same LAN or via Nabu Casa). New versions reach the user only through a push to `main` plus a version bump in `ha-app/config.yaml`; HA then offers the update. The Portainer/Docker setup is the alternative.
 - Debugging the live App: read its log with the HA MCP tools (`ha_get_logs`, `source: "supervisor"`, `slug: "570056f1_druckwerk"`). A request that is missing there was rejected by HA before reaching the app (e.g. ingress `401`). Because of `TRUST_PROXY`, the logged `remoteAddress` is the forwarded client (e.g. the user's PC), not the socket; the ingress guard checks `req.socket.remoteAddress`, so such entries don't mean direct LAN access.
 - Local testing on the user's phone (Samsung Internet, Android 10; Chrome on the phone fails to connect): `https://<PC-IP>:3000` from `npm run prod`, which must be restarted to rebuild the client before reloading the page.
 - Roadmap:

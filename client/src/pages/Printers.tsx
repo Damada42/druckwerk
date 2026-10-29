@@ -67,19 +67,23 @@ function CostComparison({ printers }: { printers: Printer[] }) {
   const cheapest = Math.min(...hourly.map((h) => h.total));
   return (
     <Card className="mt-6 overflow-x-auto">
-      <div className="border-b border-line px-5 py-4">
+      <div className="border-b border-line px-3 py-4 sm:px-5">
         <h2 className="font-semibold">Kostenvergleich pro Druckstunde</h2>
         <p className="text-xs text-muted">
           Strom = Watt ÷ 1000 × €/kWh · Abnutzung = Druckerpreis ÷ Lebensdauer · Wartung = Wartung
           pro Jahr ÷ Druckstunden pro Jahr
         </p>
       </div>
-      <table className="w-full min-w-[480px] text-sm">
+      {/* Ab drei Druckern wird es eng: dann scrollen statt quetschen */}
+      <table
+        className="w-full text-sm"
+        style={{ minWidth: printers.length > 2 ? 150 + printers.length * 95 : undefined }}
+      >
         <thead>
           <tr className="text-left">
-            <th className="px-5 py-2.5 font-medium text-muted">Parameter</th>
+            <th className="px-3 py-2.5 font-medium text-muted sm:px-5">Parameter</th>
             {printers.map((p) => (
-              <th key={p.id} className="px-4 py-2.5 text-right font-semibold">
+              <th key={p.id} className="px-3 py-2.5 text-right font-semibold sm:px-4">
                 {p.name}
               </th>
             ))}
@@ -88,9 +92,9 @@ function CostComparison({ printers }: { printers: Printer[] }) {
         <tbody className="divide-y divide-[var(--border)] border-t border-line">
           {COST_ROWS.map((row) => (
             <tr key={row.label}>
-              <td className="px-5 py-2 text-muted">{row.label}</td>
+              <td className="px-3 py-2 text-muted sm:px-5">{row.label}</td>
               {printers.map((p) => (
-                <td key={p.id} className="px-4 py-2 text-right tabular-nums">
+                <td key={p.id} className="px-3 py-2 text-right tabular-nums sm:px-4">
                   {row.value(p)}
                 </td>
               ))}
@@ -106,12 +110,12 @@ function CostComparison({ printers }: { printers: Printer[] }) {
                   row.key === 'power' && 'border-t-2 border-line',
                 )}
               >
-                <td className={cx('px-5 py-2', !isTotal && 'text-muted')}>{row.label}</td>
+                <td className={cx('px-3 py-2 sm:px-5', !isTotal && 'text-muted')}>{row.label}</td>
                 {hourly.map((h, i) => (
                   <td
                     key={printers[i].id}
                     className={cx(
-                      'px-4 py-2 text-right tabular-nums',
+                      'px-3 py-2 text-right tabular-nums sm:px-4',
                       isTotal &&
                         printers.length > 1 &&
                         h.total === cheapest &&
