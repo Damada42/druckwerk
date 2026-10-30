@@ -161,11 +161,13 @@ export async function buildApp(options: AppOptions) {
       registerCrud(api, db, '/printers', schema.printers, { required: ['name', 'model'] });
       registerCrud(api, db, '/spools', schema.filamentSpools, {
         required: ['typeId', 'manufacturer', 'colorName'],
-        beforeCreate: (data) => ({
+        // Die AMS-Zuordnung setzen nur /ams-link und /ams-import – sonst hätte z.B. eine kopierte
+        // Spule denselben Slot wie das Original
+        beforeCreate: ({ haTrayEntity: _slot, ...data }) => ({
           ...prepareSpool(db, data, true),
           weightRemainingG: data.weightRemainingG ?? data.weightTotalG ?? 1000,
         }),
-        beforeUpdate: (data) => prepareSpool(db, data, false),
+        beforeUpdate: ({ haTrayEntity: _slot, ...data }) => prepareSpool(db, data, false),
       });
 
       /** Verbrauch von einer Spule abbuchen (negativ = zurückbuchen). */

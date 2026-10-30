@@ -146,7 +146,7 @@ React 19, Vite 7, Tailwind v4 (tokens in `index.css`), React Router 7 and TanSta
 
 ## Context
 
-- Production: the user runs Druckwerk as a Home Assistant App (slug `570056f1_druckwerk`) and opens it on the phone in the HA Companion app (Android 10, same LAN or via Nabu Casa). New versions reach the user only through a push to `main` plus a version bump in `ha-app/config.yaml`; HA then offers the update. The Portainer/Docker setup is the alternative.
+- Production: the user runs Druckwerk as a Home Assistant App (slug `570056f1_druckwerk`) and opens it on the phone in the HA Companion app (Galaxy S25+, same LAN or via Nabu Casa). New versions reach the user only through a push to `main` plus a version bump in `ha-app/config.yaml`; HA then offers the update. The Portainer/Docker setup is the alternative.
 - Debugging the live App: read its log with the HA MCP tools (`ha_get_logs`, `source: "supervisor"`, `slug: "570056f1_druckwerk"`). A request that is missing there was rejected by HA before reaching the app (e.g. ingress `401`). Because of `TRUST_PROXY`, the logged `remoteAddress` is the forwarded client (e.g. the user's PC), not the socket; the ingress guard checks `req.socket.remoteAddress`, so such entries don't mean direct LAN access.
 - Local testing on the user's phone (Samsung Internet, Android 10; Chrome on the phone fails to connect): `https://<PC-IP>:3000` from `npm run prod`, which must be restarted to rebuild the client before reloading the page.
 - Roadmap:
@@ -158,4 +158,4 @@ React 19, Vite 7, Tailwind v4 (tokens in `index.css`), React Router 7 and TanSta
   - Done in 0.6.0: minimum stock per filament type and variety, low-stock grouping switch, manufacturer list, full backup export/import.
   - Done in 0.6.1: scanning in the HA Companion app (live scanner only, label read for new barcodes).
   - Done in 0.7.0: Klipper printers via `moonraker`, built from a friend's Geeetech A20 entity list. Not yet seen against a live Moonraker device on the user's HA: the user's Artillery "SidewinderX1" integration is still in `setup_retry`. Once it's online, check its entities with `ha_eval_template` and `PRINTER_TEMPLATE`.
-- The user's Home Assistant is reachable through the HA MCP tools in this environment. Use them (read-only) to look at real entity data, e.g. `ha_eval_template` with `BAMBU_TEMPLATE`. Never put the user's token anywhere; the user enters it in the app.
+- The user's Home Assistant is reachable through the HA MCP tools in this environment. Use them (read-only) to look at real entity data, e.g. `ha_eval_template` with `PRINTER_TEMPLATE`. Never put the user's token anywhere; the user enters it in the app.

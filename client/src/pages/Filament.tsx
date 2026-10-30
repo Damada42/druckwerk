@@ -119,7 +119,7 @@ export function FilamentPage() {
 
   const duplicate = (s: FilamentSpool) => {
     const { id: _id, createdAt: _c, ...rest } = s;
-    save.mutate({ ...rest, weightRemainingG: s.weightTotalG });
+    save.mutate({ ...rest, weightRemainingG: s.weightTotalG, haTrayEntity: null });
   };
 
   const types0 = byType.map((t) => t.type);

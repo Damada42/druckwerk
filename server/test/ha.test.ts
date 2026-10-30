@@ -341,6 +341,23 @@ describe('Home-Assistant-Anbindung über die API', () => {
     expect(spools.find((s) => s.id === b)?.haTrayEntity).toBe(SLOT(2));
   });
 
+  it('übernimmt den Slot nicht beim Kopieren oder Bearbeiten einer Spule', async () => {
+    const a = await spool('Schwarz', 1);
+    const original = (await json<FilamentSpool>('GET', `/api/spools/${a}`)).body;
+    const { id: _id, createdAt: _c, ...rest } = original;
+    const copy = await json<FilamentSpool>('POST', '/api/spools', rest);
+    expect(copy.status).toBe(201);
+    expect(copy.body.haTrayEntity).toBeNull();
+
+    // Bearbeiten schickt den Slot unverändert mit – er bleibt, ein anderer wird ignoriert
+    const edited = await json<FilamentSpool>('PUT', `/api/spools/${a}`, {
+      ...rest,
+      colorName: 'Tiefschwarz',
+      haTrayEntity: SLOT(4),
+    });
+    expect(edited.body).toMatchObject({ colorName: 'Tiefschwarz', haTrayEntity: SLOT(1) });
+  });
+
   it('bucht nach fertigem Druck automatisch ab – aufgeteilt nach Druckzeit je Slot', async () => {
     await connect();
     await linkPrinter();
