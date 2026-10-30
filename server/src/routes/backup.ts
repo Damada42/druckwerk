@@ -57,14 +57,16 @@ export function registerBackupRoutes(app: FastifyInstance, db: Db, options: Back
   }
 
   app.get('/backup', async (_req, reply) => {
-    const files: Zippable = { [DB_NAME]: await dbBytes() };
+    // Nur die Datenbank packen; alles andere unkomprimiert ablegen. Der Windows-Explorer bricht
+    // beim Entpacken ab (Fehler 0x80004005), wenn eine Datei gepackt größer ist als vorher – das
+    // passiert bei kleinen Dateien und bei Fotos/PDFs, die schon komprimiert sind.
+    const files: Zippable = { [DB_NAME]: [await dbBytes(), { level: 1 }] };
     for (const rel of listFiles(options.uploadDir))
       files[`uploads/${rel}`] = new Uint8Array(readFileSync(path.join(options.uploadDir, rel)));
     files['druckwerk-backup.json'] = strToU8(
       JSON.stringify({ createdAt: new Date().toISOString(), migration: latestMigration() }),
     );
-    // Datenbank und Bilder/PDFs sind schon dicht genug, stärker packen kostet nur Zeit
-    const zip = zipSync(files, { level: 1 });
+    const zip = zipSync(files, { level: 0 });
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
     return reply
       .header('content-disposition', `attachment; filename="druckwerk-backup-${stamp}.zip"`)
