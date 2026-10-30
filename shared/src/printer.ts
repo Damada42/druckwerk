@@ -1,4 +1,5 @@
-// Live-Status von Bambu-Lab-Druckern aus Home Assistant (Integration „bambu_lab“).
+// Live-Status von Druckern aus Home Assistant: Bambu Lab (Integration „bambu_lab“) und
+// Klipper (Integration „moonraker“).
 
 /** Ein Entity-Zustand, wie ihn der Server per Template aus Home Assistant holt */
 export interface HaEntity {
@@ -12,7 +13,12 @@ export interface HaEntity {
   model: string | null;
   /** Von welcher Home-Assistant-Verbindung (Standort) die Entity stammt */
   connectionId?: number;
+  /** Integration: „bambu_lab“ (Standard, auch wenn es fehlt) oder „moonraker“ (Klipper) */
+  platform?: string;
 }
+
+/** Welche Art Drucker hinter einem Gerät steckt */
+export type PrinterKind = 'bambu' | 'klipper';
 
 /** Ein in Home Assistant gefundener Drucker (zur Auswahl beim Verknüpfen) */
 export interface HaPrinterDevice {
@@ -71,6 +77,7 @@ export interface AmsSlot {
 }
 
 export interface PrinterLive {
+  kind: PrinterKind;
   online: boolean;
   state: PrintState;
   stateLabel: string;
@@ -99,7 +106,11 @@ export interface PrinterLive {
   canStop: boolean;
   /** Aktuelle Geschwindigkeitsstufe; null = Drucker meldet keine (z.B. im Leerlauf) */
   speed: PrintSpeed | null;
+  /** Klipper: Geschwindigkeitsfaktor in % (statt Stufen); null bei Bambu */
+  speedPercent: number | null;
   canSetSpeed: boolean;
+  /** Klipper: im laufenden Auftrag verbrauchtes Filament in Metern; null bei Bambu */
+  filamentUsedM: number | null;
   /** Teile auf der Druckplatte des aktuellen Auftrags */
   objects: PrintObject[];
   /** Überspringen geht nur während eines Drucks und solange danach noch ein Teil übrig bleibt */
@@ -119,6 +130,9 @@ export const PRINT_SPEED_LABELS: Record<PrintSpeed, { label: string; percent: nu
   sport: { label: 'Sport', percent: 124 },
   ludicrous: { label: 'Ludicrous', percent: 166 },
 };
+
+/** Klipper: Stufen für den Geschwindigkeitsfaktor (der Drucker kann 0–200 %) */
+export const KLIPPER_SPEED_PERCENTS = [50, 75, 100, 125, 150] as const;
 
 export interface PrintObject {
   /** ID im Druckauftrag, für den Überspringen-Befehl */
@@ -156,6 +170,44 @@ const ROLES = {
 
 export type PrinterRole = keyof typeof ROLES;
 
+/**
+ * Klipper über die Moonraker-Integration: deren Entity-Namen sind immer englisch (keine
+ * Übersetzungen), z.B. sensor.a20_current_print_state. Gleiche Rollennamen wie bei Bambu, damit
+ * Steuerung und Bilder auf dem Server gleich funktionieren.
+ */
+const KLIPPER_ROLES = {
+  state: ['sensor', ['current_print_state']],
+  printerState: ['sensor', ['printer_state']],
+  progress: ['sensor', ['progress']],
+  remaining: ['sensor', ['print_time_left']],
+  endTime: ['sensor', ['print_eta']],
+  layer: ['sensor', ['current_layer']],
+  totalLayers: ['sensor', ['total_layer']],
+  nozzleTemp: ['sensor', ['extruder_temperature']],
+  nozzleTarget: ['number', ['extruder_target']],
+  bedTemp: ['sensor', ['bed_temperature']],
+  bedTarget: ['number', ['bed_target']],
+  taskName: ['sensor', ['filename']],
+  filamentUsed: ['sensor', ['filament_used']],
+  cover: ['camera', ['thumbnail']],
+  pause: ['button', ['pause_print']],
+  resume: ['button', ['resume_print']],
+  stop: ['button', ['cancel_print']],
+  speed: ['number', ['speed_factor']],
+} as const satisfies Record<string, readonly [string, readonly string[]]>;
+
+export type KlipperRole = keyof typeof KLIPPER_ROLES;
+
+/** Klipper-Druckstatus (print_stats.state) → gemeinsamer Druckstatus */
+const KLIPPER_STATES: Record<string, PrintState> = {
+  standby: 'idle',
+  printing: 'running',
+  paused: 'pause',
+  complete: 'finish',
+  cancelled: 'failed',
+  error: 'failed',
+};
+
 const UNSET = new Set(['unknown', 'unavailable', 'none', '']);
 
 /** Alle Entities, die zu einem Drucker gehören – auch die seines AMS und der externen Spule */
@@ -163,7 +215,7 @@ export function entitiesOfPrinter(entities: HaEntity[], deviceId: string): HaEnt
   return entities.filter((e) => e.deviceId === deviceId || e.viaDeviceId === deviceId);
 }
 
-/** Drucker unter den Bambu-Geräten: alles, was nicht an einem anderen Gerät hängt */
+/** Drucker unter den Geräten (Bambu und Klipper): alles, was nicht an einem anderen Gerät hängt */
 export function findPrinterDevices(entities: HaEntity[]): HaPrinterDevice[] {
   const devices = new Map<string, HaPrinterDevice>();
   for (const e of entities) {
@@ -177,21 +229,30 @@ export function findPrinterDevices(entities: HaEntity[]): HaPrinterDevice[] {
   return [...devices.values()];
 }
 
+/** Bambu oder Klipper – an der Integration der Entities des Geräts erkannt */
+export function printerKind(entities: HaEntity[], deviceId: string): PrinterKind {
+  return entities.some((e) => e.deviceId === deviceId && e.platform === 'moonraker')
+    ? 'klipper'
+    : 'bambu';
+}
+
 /** Entity-ID je Rolle (z.B. der „Pause“-Knopf), damit der Server Befehle schicken kann */
 export function printerRoles(
   entities: HaEntity[],
   deviceId: string,
-): Partial<Record<PrinterRole, string>> {
+): Partial<Record<PrinterRole | KlipperRole, string>> {
   const own = entities.filter((e) => e.deviceId === deviceId);
-  const roles: Partial<Record<PrinterRole, string>> = {};
-  for (const [role, [domain, suffixes]] of Object.entries(ROLES)) {
+  const table: Record<string, readonly [string, readonly string[]]> =
+    printerKind(entities, deviceId) === 'klipper' ? KLIPPER_ROLES : ROLES;
+  const roles: Partial<Record<PrinterRole | KlipperRole, string>> = {};
+  for (const [role, [domain, suffixes]] of Object.entries(table)) {
     // Mit Unterstrich davor, sonst passt „temperatur_der_duse“ auch auf „zieltemperatur_der_duse“
     const match = own.find(
       (e) =>
         e.entityId.startsWith(`${domain}.`) &&
         suffixes.some((s) => e.entityId.endsWith(`_${s}`) || e.entityId === `${domain}.${s}`),
     );
-    if (match) roles[role as PrinterRole] = match.entityId;
+    if (match) roles[role as PrinterRole | KlipperRole] = match.entityId;
   }
   return roles;
 }
@@ -250,8 +311,17 @@ function amsSlots(entities: HaEntity[]): AmsSlot[] {
     );
 }
 
+/** Dauer in Minuten aus einem Sensor mit Einheit h, min oder s (ohne Einheit: Minuten) */
+function minutes(entity: HaEntity | undefined): number | null {
+  const n = num(entity?.state);
+  if (n === null) return null;
+  const unit = entity?.attributes.unit_of_measurement;
+  return Math.round(unit === 'h' ? n * 60 : unit === 's' ? n / 60 : n);
+}
+
 /** Macht aus den Home-Assistant-Entities eines Druckers einen übersichtlichen Live-Status */
 export function parsePrinterLive(entities: HaEntity[], deviceId: string): PrinterLive {
+  if (printerKind(entities, deviceId) === 'klipper') return parseKlipperLive(entities, deviceId);
   const mine = entitiesOfPrinter(entities, deviceId);
   const roles = printerRoles(mine, deviceId);
   const byId = new Map(mine.map((e) => [e.entityId, e]));
@@ -273,6 +343,7 @@ export function parsePrinterLive(entities: HaEntity[], deviceId: string): Printe
   const objects = printObjects(get('objects'), get('skipped'));
 
   return {
+    kind: 'bambu',
     online,
     state,
     stateLabel: PRINT_STATE_LABELS[state],
@@ -296,13 +367,116 @@ export function parsePrinterLive(entities: HaEntity[], deviceId: string): Printe
     speed: (PRINT_SPEEDS as readonly string[]).includes(value('speed') ?? '')
       ? (value('speed') as PrintSpeed)
       : null,
+    speedPercent: null,
     canSetSpeed: usable('speed') && (state === 'running' || state === 'pause'),
+    filamentUsedM: null,
     objects,
     canSkip:
       (state === 'running' || state === 'pause') && objects.filter((o) => !o.skipped).length > 1,
     plateVersion: get('plate')?.attributes.entity_picture ? (text(value('plate')) ?? 'x') : null,
     ams: amsSlots(mine),
   };
+}
+
+/**
+ * Klipper (Moonraker): Ohne AMS gibt es einen einzigen Platz „Spule“. Er steht für die Spule im
+ * Drucker und lässt sich wie ein AMS-Slot mit einer Spule aus dem Bestand verknüpfen; als ID dient
+ * der Sensor für den Filamentverbrauch.
+ */
+function parseKlipperLive(entities: HaEntity[], deviceId: string): PrinterLive {
+  const mine = entitiesOfPrinter(entities, deviceId);
+  const roles = printerRoles(mine, deviceId) as Partial<Record<KlipperRole, string>>;
+  const byId = new Map(mine.map((e) => [e.entityId, e]));
+  const get = (role: KlipperRole) => (roles[role] ? byId.get(roles[role]!) : undefined);
+  const value = (role: KlipperRole) => get(role)?.state ?? null;
+  const usable = (role: KlipperRole) => {
+    const s = value(role);
+    return s !== null && s !== 'unavailable';
+  };
+
+  // Nicht erreichbar: Home Assistant meldet die Sensoren als „unavailable“
+  const online =
+    usable('state') && !['shutdown', 'unavailable'].includes(value('printerState') ?? '');
+  const raw = (text(value('state')) ?? '').toLowerCase();
+  const state: PrintState = !online ? 'offline' : (KLIPPER_STATES[raw] ?? 'unknown');
+  const printing = state === 'running' || state === 'pause';
+  const filament = get('filamentUsed');
+  const taskName = text(value('taskName'));
+
+  return {
+    kind: 'klipper',
+    online,
+    state,
+    stateLabel: PRINT_STATE_LABELS[state],
+    progress: num(value('progress')),
+    remainingMin: minutes(get('remaining')),
+    endTime: text(value('endTime')),
+    startTime: null,
+    layer: num(value('layer')),
+    totalLayers: num(value('totalLayers')) || null,
+    nozzleTemp: num(value('nozzleTemp')),
+    nozzleTarget: num(value('nozzleTarget')),
+    bedTemp: num(value('bedTemp')),
+    bedTarget: num(value('bedTarget')),
+    taskName,
+    weightG: null,
+    light: null,
+    // Vorschaubild ändert sich mit der Datei
+    coverVersion: get('cover')?.attributes.entity_picture && taskName ? taskName : null,
+    canPause: usable('pause') && state === 'running',
+    canResume: usable('resume') && state === 'pause',
+    canStop: usable('stop') && printing,
+    speed: null,
+    speedPercent: usable('speed') ? num(value('speed')) : null,
+    canSetSpeed: usable('speed') && printing,
+    filamentUsedM: printing ? num(value('filamentUsed')) : null,
+    objects: [],
+    canSkip: false,
+    plateVersion: null,
+    ams: filament
+      ? [
+          {
+            entityId: filament.entityId,
+            label: 'Spule',
+            name: null,
+            type: null,
+            color: null,
+            remain: null,
+            weightG: null,
+            empty: false,
+            active: state === 'running',
+          },
+        ]
+      : [],
+  };
+}
+
+/** Dichte in g/cm³ je Filamenttyp (Anfang des Namens), für Meter → Gramm */
+const DENSITIES: [string, number][] = [
+  ['pctg', 1.23],
+  ['petg', 1.27],
+  ['pet', 1.27],
+  ['pla', 1.24],
+  ['abs', 1.04],
+  ['asa', 1.07],
+  ['tpu', 1.21],
+  ['tpe', 1.2],
+  ['pa', 1.14],
+  ['nylon', 1.14],
+  ['pc', 1.2],
+  ['pva', 1.23],
+  ['pvb', 1.08],
+  ['pp', 0.9],
+  ['hips', 1.04],
+];
+
+/** Gewicht eines Filamentstücks: Länge × Querschnitt × Dichte (unbekannter Typ: wie PLA) */
+export function filamentGrams(meters: number, diameterMm: number, typeName?: string | null) {
+  const name = (typeName ?? '').trim().toLowerCase();
+  const density = DENSITIES.find(([prefix]) => name.startsWith(prefix))?.[1] ?? 1.24;
+  // m × mm² = cm³ (1000 mm × mm² / 1000)
+  const cm3 = meters * Math.PI * (diameterMm / 2) ** 2;
+  return Math.round(cm3 * density * 10) / 10;
 }
 
 /** Teile des Auftrags: „objects“ ist {id: name}, übersprungene kommen als Liste von IDs */

@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 
-/** Rohdaten wie aus dem Bambu-Template (siehe BAMBU_TEMPLATE) */
+/** Rohdaten wie aus dem Drucker-Template (siehe PRINTER_TEMPLATE) */
 export interface RawEntity {
   e: string;
   s: string | null;
@@ -9,6 +9,8 @@ export interface RawEntity {
   v: string | null;
   n: string | null;
   m: string | null;
+  /** Integration; fehlt im Bambu-Fixture (= bambu_lab) */
+  p?: string;
 }
 
 export const FAKE_TOKEN = 'test-token';
@@ -64,12 +66,16 @@ export class FakeHa {
   /** Kameras: die des P1S aus dem Fixture und eine Klipper-Kamera wie beim SidewinderX1 */
   cameras: RawCamera[];
 
+  /**
+   * @param klipper weitere Entities eines Klipper-Druckers (Moonraker), z.B. das A20-Fixture
+   */
   constructor(
     fixture: RawEntity[],
     readonly printer = 'the_one',
     readonly ams = 'p1s_01p09a431900844_ams_1',
+    klipper: RawEntity[] = [],
   ) {
-    this.entities = structuredClone(fixture);
+    this.entities = structuredClone([...fixture, ...klipper]);
     this.cameras = [
       ...this.entities
         .filter((x) => x.e.startsWith('camera.'))
@@ -144,6 +150,23 @@ export class FakeHa {
     );
   }
 
+  /**
+   * Einen Druck auf dem Klipper-Drucker (Präfix „a20“) einstellen: Zustand wie Moonraker
+   * (standby, printing, paused, complete, cancelled), verbrauchte Meter und Datei
+   */
+  klipperPrint(
+    state: string,
+    options: { meters?: number; progress?: number; file?: string; prefix?: string } = {},
+  ) {
+    const p = options.prefix ?? 'a20';
+    const printing = state === 'printing' || state === 'paused';
+    this.set(`sensor.${p}_current_print_state`, state);
+    // Wie die Integration: Datei und Verbrauch sind außerhalb eines Drucks leer bzw. 0
+    this.set(`sensor.${p}_filename`, printing ? (options.file ?? 'teil.gcode') : '');
+    this.set(`sensor.${p}_filament_used`, printing ? String(options.meters ?? 0) : '0.0');
+    this.set(`sensor.${p}_progress`, printing ? String(options.progress ?? 0) : '0.0');
+  }
+
   handle(
     method: string,
     path: string,
@@ -184,6 +207,7 @@ export class FakeHa {
       this.calls.push({ domain: service[1], service: service[2], entityId, data });
       if (service[1] === 'light') this.set(entityId!, service[2] === 'turn_on' ? 'on' : 'off');
       if (service[1] === 'select') this.set(entityId!, String(data.option));
+      if (service[1] === 'number') this.set(entityId!, String(data.value));
       if (service[1] === 'bambu_lab' && service[2] === 'skip_objects') {
         const skipped = this.entities.find(
           (x) => x.e === `sensor.${this.printer}_ubersprungene_objekte`,
@@ -230,6 +254,11 @@ export class FakeHa {
         // Teststeuerung: Zustand von außen setzen
         if (req.method === 'POST' && url.pathname === '/test/print') {
           this.print(...(JSON.parse(body) as Parameters<FakeHa['print']>));
+          res.writeHead(204).end();
+          return;
+        }
+        if (req.method === 'POST' && url.pathname === '/test/klipper') {
+          this.klipperPrint(...(JSON.parse(body) as Parameters<FakeHa['klipperPrint']>));
           res.writeHead(204).end();
           return;
         }

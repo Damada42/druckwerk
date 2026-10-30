@@ -254,3 +254,11 @@ Hersteller lässt sich direkt im Formular über „Neuer Hersteller …“ eintr
 **Backup:** Unter „Einstellungen → Backup“ lädt „Backup herunterladen“ eine ZIP-Datei mit allen Daten,
 Rechnungen, Fotos und dem Logo. „Backup einspielen“ ersetzt alles durch den Stand der Datei (auch aus
 älteren Versionen); der vorherige Stand bleibt als Sicherheitskopie im Datenordner unter `backup/`.
+
+**Klipper-Drucker:** Drucker mit Klipper, die in Home Assistant über die Integration „Moonraker“
+eingebunden sind, lassen sich wie der P1S verknüpfen. Druckwerk zeigt dann Status, Fortschritt,
+Restzeit, Schichten, Temperaturen und das Vorschaubild. Pause, Fortsetzen und Abbrechen gehen auch, die
+Geschwindigkeit lässt sich in Prozent ändern. Statt der AMS-Slots gibt es einen Platz „Spule“ für die
+Spule im Drucker. Nach jedem Druck rechnet die App die verbrauchte Länge über Durchmesser und Material
+in Gramm um und bucht sie von dieser Spule ab. Teile überspringen bietet die Moonraker-Integration nicht
+an.

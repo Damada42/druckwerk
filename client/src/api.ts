@@ -411,11 +411,16 @@ export function usePrintAdjust(printerId: number) {
       api.post<void>(`/printers/${printerId}/speed`, { speed: value }),
     onSuccess: refresh,
   });
+  /** Klipper: Geschwindigkeitsfaktor in % */
+  const speedPercent = useMutation({
+    mutationFn: (percent: number) => api.post<void>(`/printers/${printerId}/speed`, { percent }),
+    onSuccess: refresh,
+  });
   const skip = useMutation({
     mutationFn: (objects: string[]) => api.post<void>(`/printers/${printerId}/skip`, { objects }),
     onSuccess: refresh,
   });
-  return { speed, skip };
+  return { speed, speedPercent, skip };
 }
 
 /** Spule aus einem AMS-Slot in den Bestand übernehmen (und dem Slot zuordnen) */

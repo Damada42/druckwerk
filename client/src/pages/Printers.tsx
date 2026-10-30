@@ -183,7 +183,7 @@ export function PrintersPage() {
         }
       />
       {!isLoading && printers.length === 0 && <Empty>Noch keine Drucker angelegt.</Empty>}
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         {printers.map((p) => {
           const active = projects.filter(
             (pr) => pr.printerId === p.id && pr.status === 'in_progress',

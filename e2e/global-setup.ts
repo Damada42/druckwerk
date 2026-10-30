@@ -36,7 +36,11 @@ export default async function globalSetup() {
   const fixture = JSON.parse(
     readFileSync(path.join(__dirname, '../server/test/fixtures/bambu-p1s.json'), 'utf8'),
   ) as RawEntity[];
-  const ha = new FakeHa(fixture);
+  // Dazu ein Klipper-Drucker (Geeetech A20 über Moonraker)
+  const klipper = JSON.parse(
+    readFileSync(path.join(__dirname, '../server/test/fixtures/klipper-a20.json'), 'utf8'),
+  ) as RawEntity[];
+  const ha = new FakeHa(fixture, undefined, undefined, klipper);
   await ha.listen(FAKE_HA_PORT);
   // Wie Home-Assistant-Ingress vor dem Testserver
   const ingress = await startIngressProxy(INGRESS_PORT, APP_PORT);

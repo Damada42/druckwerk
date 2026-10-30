@@ -1,11 +1,15 @@
 import { ACTIVE_PRINT_STATES, type PrinterLive } from '@3dapp/shared';
 
-/** Was nach einem Druck abgebucht werden soll: Gramm je AMS-Slot */
+/**
+ * Was nach einem Druck abgebucht werden soll: Gramm je AMS-Slot. Klipper meldet statt des
+ * Gewichts die Länge – dann stehen Meter drin, und die Gramm rechnet die Abbuchung mit
+ * Durchmesser und Typ der Spule aus.
+ */
 export interface BookingPlan {
   jobKey: string;
   jobName: string | null;
   result: 'finish' | 'failed';
-  shares: { entityId: string; grams: number; estimated: boolean }[];
+  shares: { entityId: string; grams: number; meters?: number; estimated: boolean }[];
 }
 
 interface Job {
@@ -21,6 +25,8 @@ interface Job {
   lastSlot: string | null;
   progress: number | null;
   weightG: number | null;
+  /** Klipper: höchster gemeldeter Filamentverbrauch in Metern (nach dem Druck meldet er 0) */
+  meters: number | null;
 }
 
 /** Längere Lücken (Server war aus) zählen nur so viel, damit ein Slot nicht überwiegt */
@@ -57,6 +63,7 @@ export class PrintTracker {
           lastSlot: null,
           progress: live.progress,
           weightG: live.weightG,
+          meters: live.filamentUsedM,
         };
         this.jobs.set(printerKey, current);
       } else if (current.provisional && live.startTime) {
@@ -71,6 +78,8 @@ export class PrintTracker {
       current.name = live.taskName ?? current.name;
       current.progress = live.progress ?? current.progress;
       current.weightG = live.weightG ?? current.weightG;
+      if (live.filamentUsedM !== null)
+        current.meters = Math.max(current.meters ?? 0, live.filamentUsedM);
       return null;
     }
 
@@ -81,6 +90,26 @@ export class PrintTracker {
     if (job.slots.size === 0 && job.lastSlot) job.slots.set(job.lastSlot, 0);
 
     const result = live.state === 'finish' ? 'finish' : 'failed';
+
+    // Klipper: gemessene Länge, auch bei Abbruch genau – kein Anteil nach Fortschritt nötig
+    if (job.meters !== null) {
+      const [slot] = job.slots.keys();
+      if (!slot || job.meters <= 0) return null;
+      return {
+        jobKey: job.key,
+        jobName: job.name,
+        result,
+        shares: [
+          {
+            entityId: slot,
+            grams: 0,
+            meters: Math.round(job.meters * 100) / 100,
+            estimated: false,
+          },
+        ],
+      };
+    }
+
     const weight = live.weightG ?? job.weightG;
     const factor = result === 'finish' ? 1 : Math.min(100, Math.max(0, job.progress ?? 0)) / 100;
     const grams = (weight ?? 0) * factor;

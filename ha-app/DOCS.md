@@ -14,6 +14,7 @@ Filament-Abbuchung.
 
 ## Home Assistant
 
+Drucker kommen aus den Integrationen „Bambu Lab“ (mit bis zu vier AMS) und „Moonraker“ (Klipper).
 Die Verbindung zu diesem Home Assistant besteht automatisch (Einstellungen in Druckwerk zeigen
 „Dieses Home Assistant (App)“) – kein Token nötig. Weitere Home-Assistant-Instanzen, z.B. in der
 Werkstatt, lassen sich wie gewohnt mit Adresse und langlebigem Zugriffstoken hinzufügen.

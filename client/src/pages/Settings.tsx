@@ -198,7 +198,7 @@ function ConnectionRow({
         <p className="mt-1.5 text-muted">
           {c.printers.length
             ? `Gefundene Drucker: ${c.printers.map((p) => `${p.name} (${p.model})`).join(', ')} – unter „Drucker“ verknüpfen.`
-            : 'Keine Bambu-Lab-Drucker gefunden. Ist die Integration „Bambu Lab“ eingerichtet?'}
+            : 'Keine Drucker gefunden. Ist die Integration „Bambu Lab“ oder „Moonraker“ (Klipper) eingerichtet?'}
         </p>
       )}
       <ErrorText error={remove.error} />

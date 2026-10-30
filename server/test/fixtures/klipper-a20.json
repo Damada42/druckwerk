@@ -1,0 +1,600 @@
+[
+  {
+    "e": "button.a20_cancel_print",
+    "s": "unknown",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "button.a20_emergency_stop",
+    "s": "unknown",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "button.a20_home_all_axes",
+    "s": "unknown",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "button.a20_home_x_axis",
+    "s": "unknown",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "button.a20_home_y_axis",
+    "s": "unknown",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "button.a20_home_z_axis",
+    "s": "unknown",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "button.a20_pause_print",
+    "s": "unknown",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "button.a20_resume_print",
+    "s": "unknown",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "camera.a20_logi",
+    "s": "idle",
+    "a": {
+      "entity_picture": "/api/camera_proxy/camera.a20_logi?token=test"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "camera.a20_thumbnail",
+    "s": "idle",
+    "a": {
+      "entity_picture": "/api/camera_proxy/camera.a20_thumbnail?token=test"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "number.a20_bed_target",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "°C"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "number.a20_extruder_target",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "°C"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "number.a20_fan_speed",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "%"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "number.a20_speed_factor",
+    "s": "100.0",
+    "a": {
+      "unit_of_measurement": "%"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_bed_power",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "%"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_bed_temperature",
+    "s": "54.54",
+    "a": {
+      "unit_of_measurement": "°C"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_current_display_message",
+    "s": "",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_current_layer",
+    "s": "0",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_current_print_message",
+    "s": "",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_current_print_state",
+    "s": "complete",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_extruder_power",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "%"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_extruder_temperature",
+    "s": "215.39",
+    "a": {
+      "unit_of_measurement": "°C"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_filament_used",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "m"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_filename",
+    "s": "",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_idle_timeout_state",
+    "s": "Printing",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_jobs_in_queue",
+    "s": "0",
+    "a": {
+      "unit_of_measurement": "Jobs"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_longest_print",
+    "s": "17h 25m 33s",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_mcu_awake",
+    "s": "0.28",
+    "a": {
+      "unit_of_measurement": "%"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_mcu_load",
+    "s": "19.6",
+    "a": {
+      "unit_of_measurement": "%"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_memory_used",
+    "s": "8.9170461893191",
+    "a": {
+      "unit_of_measurement": "%"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_object_height",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "mm"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_print_duration",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "min"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_print_eta",
+    "s": "unknown",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_print_projected_total_duration",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "h"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_print_speed",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "mm/s"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_print_time_left",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "h"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_printer_message",
+    "s": "Printer is ready",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_printer_state",
+    "s": "ready",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_progress",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "%"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_queue_state",
+    "s": "paused",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_raspberry_pi_temp",
+    "s": "57.94",
+    "a": {
+      "unit_of_measurement": "°C"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_slicer_print_duration_estimate",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "h"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_slicer_print_time_left_estimate",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "h"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_system_load",
+    "s": "0.18",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_toolhead_position_x",
+    "s": "0.0",
+    "a": {
+      "unit_of_measurement": "mm"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_toolhead_position_y",
+    "s": "240.0",
+    "a": {
+      "unit_of_measurement": "mm"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_toolhead_position_z",
+    "s": "20.0049999999995",
+    "a": {
+      "unit_of_measurement": "mm"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_total_layer",
+    "s": "0.0",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_totals_filament_used",
+    "s": "775.37878049",
+    "a": {
+      "unit_of_measurement": "m"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_totals_jobs",
+    "s": "64.0",
+    "a": {
+      "unit_of_measurement": "Jobs"
+    },
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "sensor.a20_totals_print_time",
+    "s": "168h 59m 40s",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "switch.a20_lights",
+    "s": "off",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "switch.a20_output_pin_beeper",
+    "s": "off",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  },
+  {
+    "e": "switch.a20_supply",
+    "s": "on",
+    "a": {},
+    "d": "klipper-a20",
+    "v": null,
+    "n": "A20",
+    "m": "Klipper",
+    "p": "moonraker"
+  }
+]

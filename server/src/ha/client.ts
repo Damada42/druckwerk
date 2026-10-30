@@ -15,14 +15,16 @@ import { schema } from '../db/index.js';
  * Attribute, die sich nicht als JSON ausgeben lassen. „options“ ist bei einigen Sensoren ein Set –
  * daher nur von Selects (Geschwindigkeit) und als Liste.
  */
-export const BAMBU_TEMPLATE = `{%- set keys = ['slot','active','empty','color','name','type','remain','tray_uuid','tray_weight','entity_picture','options','objects'] -%}
+export const PRINTER_TEMPLATE = `{%- set keys = ['slot','active','empty','color','name','type','remain','tray_uuid','tray_weight','entity_picture','options','objects','unit_of_measurement'] -%}
 {%- set ns = namespace(out=[]) -%}
-{%- for e in integration_entities('bambu_lab') -%}
+{%- for p in ['bambu_lab', 'moonraker'] -%}
+{%- for e in integration_entities(p) -%}
 {%- set d = device_id(e) -%}
 {%- set s = states[e] -%}
 {%- set a = namespace(v={}) -%}
 {%- if s -%}{%- for k in keys if s.attributes[k] is defined and (k != 'options' or e.startswith('select.')) -%}{%- set a.v = dict(a.v, **{k: (s.attributes[k] | list) if k == 'options' else s.attributes[k]}) -%}{%- endfor -%}{%- endif -%}
-{%- set ns.out = ns.out + [{'e': e, 's': s.state if s else none, 'a': a.v, 'd': d, 'v': device_attr(d, 'via_device_id') if d else none, 'n': (device_attr(d, 'name_by_user') or device_attr(d, 'name')) if d else none, 'm': device_attr(d, 'model') if d else none}] -%}
+{%- set ns.out = ns.out + [{'e': e, 's': s.state if s else none, 'a': a.v, 'd': d, 'v': device_attr(d, 'via_device_id') if d else none, 'n': (device_attr(d, 'name_by_user') or device_attr(d, 'name')) if d else none, 'm': device_attr(d, 'model') if d else none, 'p': p}] -%}
+{%- endfor -%}
 {%- endfor -%}
 {{ ns.out | tojson }}`;
 
@@ -45,6 +47,8 @@ interface RawEntity {
   v: string | null;
   n: string | null;
   m: string | null;
+  /** Integration (bambu_lab oder moonraker) */
+  p?: string;
 }
 
 /** Home Assistant aus Sicht einer HA-App (REST-API unter /core/api, Token = SUPERVISOR_TOKEN) */
@@ -165,7 +169,7 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch, supervis
     const promise = (async () => {
       const res = await request(conn, '/api/template', {
         method: 'POST',
-        body: JSON.stringify({ template: BAMBU_TEMPLATE }),
+        body: JSON.stringify({ template: PRINTER_TEMPLATE }),
       });
       const raw = JSON.parse(await res.text()) as RawEntity[];
       return raw.map((r) => ({
@@ -176,6 +180,7 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch, supervis
         viaDeviceId: r.v,
         deviceName: r.n,
         model: r.m,
+        platform: r.p ?? 'bambu_lab',
         connectionId: conn.id,
       }));
     })();

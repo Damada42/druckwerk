@@ -1,4 +1,5 @@
 import {
+  KLIPPER_SPEED_PERCENTS,
   PRINT_SPEEDS,
   PRINT_SPEED_LABELS,
   type AmsSlot,
@@ -196,6 +197,12 @@ function LiveDetails({ printer, live }: { printer: Printer; live: PrinterLive })
               {printing && !!live.remainingMin && <span>noch {duration(live.remainingMin)}</span>}
               {printing && end && <span>fertig ca. {end}</span>}
               {live.weightG !== null && <span>{grams(live.weightG)}</span>}
+              {printing && !!live.filamentUsedM && (
+                <span>
+                  {live.filamentUsedM.toLocaleString('de-DE', { maximumFractionDigits: 1 })} m
+                  Filament
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -239,7 +246,9 @@ function LiveDetails({ printer, live }: { printer: Printer; live: PrinterLive })
 
       {printing && <PrintAdjust printer={printer} live={live} />}
 
-      {live.ams.length > 0 && <AmsSlots printerId={printer.id} slots={live.ams} />}
+      {live.ams.length > 0 && (
+        <AmsSlots printerId={printer.id} slots={live.ams} klipper={live.kind === 'klipper'} />
+      )}
       <Bookings printerId={printer.id} />
     </section>
   );
@@ -247,7 +256,7 @@ function LiveDetails({ printer, live }: { printer: Printer; live: PrinterLive })
 
 /** Geschwindigkeitsstufe umschalten und Teile überspringen – nur während eines Drucks */
 function PrintAdjust({ printer, live }: { printer: Printer; live: PrinterLive }) {
-  const { speed, skip } = usePrintAdjust(printer.id);
+  const { speed, speedPercent, skip } = usePrintAdjust(printer.id);
   const [skipping, setSkipping] = useState(false);
   const skippedCount = live.objects.filter((o) => o.skipped).length;
 
@@ -287,6 +296,43 @@ function PrintAdjust({ printer, live }: { printer: Printer; live: PrinterLive })
             })}
           </div>
           <ErrorText error={speed.error} />
+        </div>
+      )}
+
+      {live.speedPercent !== null && (
+        <div>
+          <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted uppercase">
+            <Gauge size={13} /> Geschwindigkeit
+            <span className="font-normal tracking-normal normal-case tabular-nums">
+              · jetzt {speedPercent.isPending ? speedPercent.variables : live.speedPercent} %
+            </span>
+          </h3>
+          <div
+            className="grid grid-cols-5 gap-1 rounded-lg bg-surface-2 p-1"
+            role="group"
+            aria-label="Geschwindigkeit"
+          >
+            {KLIPPER_SPEED_PERCENTS.map((p) => {
+              const active =
+                (speedPercent.isPending ? speedPercent.variables : live.speedPercent) === p;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  aria-pressed={active}
+                  disabled={!live.canSetSpeed || speedPercent.isPending}
+                  onClick={() => !active && speedPercent.mutate(p)}
+                  className={cx(
+                    'rounded-md px-1 py-1.5 text-xs font-medium tabular-nums transition disabled:opacity-60',
+                    active ? 'bg-surface text-main shadow-sm' : 'text-muted hover:text-main',
+                  )}
+                >
+                  {p} %
+                </button>
+              );
+            })}
+          </div>
+          <ErrorText error={speedPercent.error} />
         </div>
       )}
 
@@ -420,7 +466,16 @@ function spoolLabel(s: FilamentSpool, types: FilamentType[]) {
   return `${s.manufacturer} ${type} ${s.colorName} · ${grams(s.weightRemainingG)}`;
 }
 
-function AmsSlots({ printerId, slots }: { printerId: number; slots: AmsSlot[] }) {
+/** AMS-Slots bzw. bei Klipper der eine Platz „Spule“ für die Spule im Drucker */
+function AmsSlots({
+  printerId,
+  slots,
+  klipper,
+}: {
+  printerId: number;
+  slots: AmsSlot[];
+  klipper: boolean;
+}) {
   const { data: spools = [] } = useList('spools');
   const { data: types = [] } = useList('filament-types');
   const link = useAmsLink();
@@ -428,7 +483,9 @@ function AmsSlots({ printerId, slots }: { printerId: number; slots: AmsSlot[] })
 
   return (
     <div>
-      <h3 className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">AMS</h3>
+      <h3 className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">
+        {klipper ? 'Filament' : 'AMS'}
+      </h3>
       <ul className="grid gap-2">
         {slots.map((slot) => {
           const linked = spools.find((s) => s.haTrayEntity === slot.entityId);
@@ -453,14 +510,17 @@ function AmsSlots({ printerId, slots }: { printerId: number; slots: AmsSlot[] })
             >
               <div className="flex items-center gap-2">
                 <span className="w-9 shrink-0 text-xs font-semibold text-muted">{slot.label}</span>
-                {slot.color ? (
-                  <ColorDot color={slot.color} />
+                {/* Klipper meldet keine Farbe: die der zugeordneten Spule zeigen */}
+                {(slot.color ?? (klipper ? linked?.colorHex : null)) ? (
+                  <ColorDot color={(slot.color ?? linked?.colorHex)!} />
                 ) : (
                   <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-dashed border-line" />
                 )}
                 <span className="min-w-0 flex-1 truncate">
                   {slot.empty ? (
                     <span className="text-muted">leer</span>
+                  ) : klipper ? (
+                    <span className="text-muted">Spule im Drucker</span>
                   ) : (
                     (slot.name ?? slot.type ?? '?')
                   )}
@@ -472,7 +532,7 @@ function AmsSlots({ printerId, slots }: { printerId: number; slots: AmsSlot[] })
               {!slot.empty && (
                 <div className="mt-2 flex gap-2">
                   <Select
-                    aria-label={`Spule in ${slot.label}`}
+                    aria-label={klipper ? 'Spule im Drucker' : `Spule in ${slot.label}`}
                     className="min-w-0 flex-1 !py-1.5 !text-xs"
                     value={linked?.id ?? ''}
                     disabled={link.isPending}
@@ -490,7 +550,8 @@ function AmsSlots({ printerId, slots }: { printerId: number; slots: AmsSlot[] })
                       </option>
                     ))}
                   </Select>
-                  {!linked && (
+                  {/* Übernehmen braucht die Angaben aus dem AMS – Klipper kennt die Spule nicht */}
+                  {!linked && slot.type && (
                     <Button
                       className="shrink-0 !px-2.5 !py-1.5 !text-xs"
                       title="Spule mit den Daten aus dem AMS im Bestand anlegen und hier zuordnen"
@@ -517,7 +578,9 @@ function AmsSlots({ printerId, slots }: { printerId: number; slots: AmsSlot[] })
       </ul>
       <ErrorText error={link.error ?? importSpool.error} />
       <p className="mt-2 text-xs text-muted">
-        Nach jedem Druck bucht die App das Druckgewicht von der zugeordneten Spule ab.
+        {klipper
+          ? 'Nach jedem Druck bucht die App die verbrauchte Länge – umgerechnet in Gramm – von der zugeordneten Spule ab.'
+          : 'Nach jedem Druck bucht die App das Druckgewicht von der zugeordneten Spule ab.'}
       </p>
     </div>
   );

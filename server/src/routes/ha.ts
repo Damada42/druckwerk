@@ -148,12 +148,24 @@ export function registerHaRoutes(app: FastifyInstance, db: Db, ha: HaClient) {
     },
   );
 
-  /** Geschwindigkeitsstufe während des Drucks umschalten */
-  app.post<{ Params: { id: string }; Body: { speed?: PrintSpeed } }>(
+  /**
+   * Geschwindigkeit während des Drucks ändern: Bambu-Stufe (speed) oder Klipper-Faktor in %
+   * (percent, 10–200)
+   */
+  app.post<{ Params: { id: string }; Body: { speed?: PrintSpeed; percent?: number } }>(
     '/printers/:id/speed',
     async (req, reply) => {
       const speed = req.body?.speed;
-      if (!speed || !PRINT_SPEEDS.includes(speed))
+      const percent = req.body?.percent;
+      if (percent !== undefined) {
+        if (
+          typeof percent !== 'number' ||
+          !Number.isFinite(percent) ||
+          percent < 10 ||
+          percent > 200
+        )
+          return reply.code(400).send({ error: 'Geschwindigkeit bitte zwischen 10 und 200 %' });
+      } else if (!speed || !PRINT_SPEEDS.includes(speed))
         return reply.code(400).send({ error: 'Unbekannte Geschwindigkeit' });
       const printer = printerById(req.params.id);
       if (!printer?.haDeviceId) return reply.code(404).send({ error: 'Drucker nicht verknüpft' });
@@ -164,11 +176,24 @@ export function registerHaRoutes(app: FastifyInstance, db: Db, ha: HaClient) {
           return reply
             .code(409)
             .send({ error: 'Die Geschwindigkeit lässt sich nur während eines Drucks ändern.' });
+        if ((live.kind === 'klipper') !== (percent !== undefined))
+          return reply.code(400).send({
+            error:
+              live.kind === 'klipper'
+                ? 'Bei Klipper-Druckern die Geschwindigkeit in % angeben.'
+                : 'Bei Bambu-Druckern eine Geschwindigkeitsstufe wählen.',
+          });
         const entityId = printerRoles(entities, printer.haDeviceId).speed!;
-        await ha.callService(printer.haDeviceId, 'select', 'select_option', {
-          entity_id: entityId,
-          option: speed,
-        });
+        if (percent !== undefined)
+          await ha.callService(printer.haDeviceId, 'number', 'set_value', {
+            entity_id: entityId,
+            value: Math.round(percent),
+          });
+        else
+          await ha.callService(printer.haDeviceId, 'select', 'select_option', {
+            entity_id: entityId,
+            option: speed,
+          });
         return reply.code(204).send();
       } catch (e) {
         return reply.code(502).send({ error: fail(e).message });

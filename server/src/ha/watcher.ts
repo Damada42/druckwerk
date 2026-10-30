@@ -1,4 +1,4 @@
-import { parsePrinterLive, type FilamentBooking } from '@3dapp/shared';
+import { filamentGrams, parsePrinterLive, type FilamentBooking } from '@3dapp/shared';
 import { eq, isNotNull, sql } from 'drizzle-orm';
 import type { FastifyBaseLogger } from 'fastify';
 import { schema, type Db } from '../db/index.js';
@@ -20,15 +20,31 @@ export function bookPlan(
     for (const share of plan.shares) {
       const spool = spoolInSlot(tx as unknown as Db, share.entityId);
       if (!spool) {
-        log?.warn(`Keine Spule für ${share.entityId} zugeordnet – ${share.grams} g nicht gebucht`);
+        log?.warn(
+          `Keine Spule für ${share.entityId} zugeordnet – ${share.meters !== undefined ? `${share.meters} m` : `${share.grams} g`} nicht gebucht`,
+        );
         continue;
       }
+      // Klipper: Länge über Durchmesser und Dichte des Filamenttyps in Gramm umrechnen
+      const grams =
+        share.meters !== undefined
+          ? filamentGrams(
+              share.meters,
+              spool.diameter,
+              tx
+                .select({ name: schema.filamentTypes.name })
+                .from(schema.filamentTypes)
+                .where(eq(schema.filamentTypes.id, spool.typeId))
+                .get()?.name,
+            )
+          : share.grams;
+      if (grams <= 0) continue;
       const row = tx
         .insert(schema.filamentBookings)
         .values({
           spoolId: spool.id,
           printerId,
-          grams: share.grams,
+          grams,
           jobName: plan.jobName,
           jobKey: plan.jobKey,
           estimated: share.estimated,
@@ -39,7 +55,7 @@ export function bookPlan(
       if (!row) continue;
       tx.update(schema.filamentSpools)
         .set({
-          weightRemainingG: sql`max(0, ${schema.filamentSpools.weightRemainingG} - ${share.grams})`,
+          weightRemainingG: sql`max(0, ${schema.filamentSpools.weightRemainingG} - ${grams})`,
         })
         .where(eq(schema.filamentSpools.id, spool.id))
         .run();
