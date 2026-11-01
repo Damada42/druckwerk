@@ -3,23 +3,26 @@ import {
   type FilamentSpool,
   type FilamentType,
   type Finish,
+  type BackupInfo,
   type Manufacturer,
 } from '@3dapp/shared';
-import { strToU8, unzipSync, zipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { GROUP_TABLES } from '../src/routes/backup.js';
 
 let app: Awaited<ReturnType<typeof buildApp>>['app'];
+let db: Awaited<ReturnType<typeof buildApp>>['db'];
 let dir: string;
 let uploadDir: string;
 
 beforeEach(async () => {
   dir = mkdtempSync(path.join(tmpdir(), '3dapp-stock-'));
   uploadDir = path.join(dir, 'uploads');
-  ({ app } = await buildApp({ dbFile: path.join(dir, '3dapp.db'), uploadDir }));
+  ({ app, db } = await buildApp({ dbFile: path.join(dir, '3dapp.db'), uploadDir }));
 });
 
 afterEach(async () => {
@@ -253,5 +256,104 @@ describe('Backup', () => {
     expect(newer.statusCode).toBe(400);
     expect(newer.json().error).toMatch(/neueren/);
     expect(existsSync(path.join(dir, 'backup'))).toBe(false);
+  });
+  it('sichert nur gewählte Bereiche und zeigt vor dem Einspielen, was drin ist', async () => {
+    const customer = await send<{ id: number }>('POST', '/api/customers', { name: 'Erika' });
+    await send('POST', '/api/persons', { name: 'Toni' });
+    await send('PUT', '/api/company', { name: 'Testwerk' });
+
+    const res = await app.inject('/api/backup?groups=customers,company');
+    expect(res.headers['content-disposition']).toMatch(/druckwerk-backup-teil-\d+\.zip/);
+    const zip = new Uint8Array(res.rawPayload);
+    const meta = JSON.parse(strFromU8(unzipSync(zip)['druckwerk-backup.json']));
+    expect(meta.groups).toEqual(['customers', 'company']);
+
+    const inspect = await app.inject({
+      method: 'POST',
+      url: '/api/backup/inspect',
+      ...multipart('teil.zip', zip),
+    });
+    expect(inspect.statusCode).toBe(200);
+    const info = inspect.json<BackupInfo>();
+    expect(info.groups).toEqual([
+      { group: 'customers', count: 1 },
+      { group: 'company', count: 1 },
+    ]);
+
+    // Nicht enthaltene Bereiche lassen sich nicht einspielen
+    const wrong = await app.inject({
+      method: 'POST',
+      url: '/api/backup/restore',
+      payload: { token: info.token, groups: ['team'] },
+    });
+    expect(wrong.statusCode).toBe(400);
+
+    // Danach geändert: nur die Kunden zurückholen, Firmendaten und Team bleiben wie jetzt
+    await send('DELETE', `/api/customers/${customer.body.id}`);
+    await send('PUT', '/api/company', { name: 'Neuer Name' });
+    await send('POST', '/api/persons', { name: 'Vroni' });
+    const restored = await app.inject({
+      method: 'POST',
+      url: '/api/backup/restore',
+      payload: { token: info.token, groups: ['customers'] },
+    });
+    expect(restored.json()).toMatchObject({ ok: true, groups: ['customers'] });
+    expect(
+      (await send<{ name: string }[]>('GET', '/api/customers')).body.map((c) => c.name),
+    ).toEqual(['Erika']);
+    expect((await send<{ name: string }[]>('GET', '/api/persons')).body).toHaveLength(2);
+    expect((await send<{ name: string }>('GET', '/api/company')).body.name).toBe('Neuer Name');
+
+    // Das Backup wird nach dem Einspielen verworfen
+    const again = await app.inject({
+      method: 'POST',
+      url: '/api/backup/restore',
+      payload: { token: info.token, groups: ['customers'] },
+    });
+    expect(again.json().error).toMatch(/nicht mehr da/);
+  });
+
+  it('löst beim teilweisen Einspielen Verweise auf, die es nicht mehr gibt', async () => {
+    const zip = new Uint8Array((await app.inject('/api/backup?groups=customers,team')).rawPayload);
+    const customer = await send<{ id: number }>('POST', '/api/customers', { name: 'Später' });
+    const person = await send<{ id: number }>('POST', '/api/persons', { name: 'Später' });
+    const project = await send<{ id: number }>('POST', '/api/projects', {
+      title: 'Halter',
+      customerId: customer.body.id,
+      members: [{ personId: person.body.id, role: 'team' }],
+    });
+
+    const info = (
+      await app.inject({ method: 'POST', url: '/api/backup/inspect', ...multipart('b.zip', zip) })
+    ).json<BackupInfo>();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backup/restore',
+      payload: { token: info.token, groups: ['customers', 'team'] },
+    });
+    expect(res.json()).toMatchObject({ ok: true, fixed: 2 });
+    const after = (
+      await send<{ customerId: number | null; members: unknown[] }>(
+        'GET',
+        `/api/projects/${project.body.id}`,
+      )
+    ).body;
+    expect(after.customerId).toBeNull();
+    expect(after.members).toEqual([]);
+  });
+
+  it('ordnet jede Tabelle einem Bereich zu', () => {
+    const tables = (
+      db.$client
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type = 'table'
+           AND name NOT LIKE 'sqlite_%' AND name <> '__drizzle_migrations'`,
+        )
+        .all() as { name: string }[]
+    ).map((t) => t.name);
+    const mapped = new Set(
+      Object.values(GROUP_TABLES).flatMap((parts) => parts.map((p) => p.table)),
+    );
+    expect(tables.filter((t) => !mapped.has(t))).toEqual([]);
   });
 });

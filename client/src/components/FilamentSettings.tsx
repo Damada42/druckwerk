@@ -1,15 +1,26 @@
-import { LOW_STOCK_GROUP_LABELS, type FilamentType, type LowStockGroup } from '@3dapp/shared';
+import {
+  BACKUP_GROUP_HINTS,
+  BACKUP_GROUP_LABELS,
+  BACKUP_GROUP_UNITS,
+  BACKUP_GROUPS,
+  LOW_STOCK_GROUP_LABELS,
+  type BackupGroup,
+  type BackupInfo,
+  type FilamentType,
+  type LowStockGroup,
+} from '@3dapp/shared';
 import { Check, Download, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   downloadBackup,
-  useBackupImport,
+  useBackupInspect,
+  useBackupRestore,
   useList,
   useSave,
   useSaveSettings,
   useSettings,
 } from '../api';
-import { Button, Card, ErrorText, NumberInput, TextInput, parseNumber } from './ui';
+import { Button, Card, ErrorText, NumberInput, TextInput, cx, parseNumber } from './ui';
 
 /** Filamenttypen mit Mindestmenge: Vorgabe für alle Sorten des Typs */
 export function FilamentTypesCard() {
@@ -213,19 +224,94 @@ export function ManufacturersCard() {
   );
 }
 
-/** Alles sichern und wieder einspielen (Datenbank plus Rechnungen, Fotos, Logo) */
+/** Häkchen für „Alles“ und jeden Bereich; nicht verfügbare Bereiche sind ausgegraut */
+function BackupGroupChecks({
+  name,
+  selected,
+  onChange,
+  available = BACKUP_GROUPS,
+  detail,
+}: {
+  name: string;
+  selected: BackupGroup[];
+  onChange: (groups: BackupGroup[]) => void;
+  available?: readonly BackupGroup[];
+  detail?: (group: BackupGroup) => string;
+}) {
+  const allRef = useRef<HTMLInputElement>(null);
+  const all = selected.length === available.length;
+  useEffect(() => {
+    if (allRef.current) allRef.current.indeterminate = selected.length > 0 && !all;
+  }, [selected.length, all]);
+  const toggle = (group: BackupGroup, on: boolean) =>
+    onChange(BACKUP_GROUPS.filter((g) => (g === group ? on : selected.includes(g))));
+  const box = 'mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent)]';
+
+  return (
+    <fieldset className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+      <legend className="sr-only">{name}</legend>
+      <label className="flex items-start gap-3 text-sm font-medium sm:col-span-2">
+        <input
+          ref={allRef}
+          type="checkbox"
+          className={box}
+          checked={all}
+          onChange={(e) => onChange(e.target.checked ? [...available] : [])}
+        />
+        Alles
+      </label>
+      {BACKUP_GROUPS.map((group) => {
+        const enabled = available.includes(group);
+        return (
+          <label
+            key={group}
+            className={cx('flex items-start gap-3 text-sm', !enabled && 'opacity-50')}
+          >
+            <input
+              type="checkbox"
+              className={box}
+              disabled={!enabled}
+              checked={selected.includes(group)}
+              onChange={(e) => toggle(group, e.target.checked)}
+            />
+            <span className="min-w-0">
+              <span className="font-medium">{BACKUP_GROUP_LABELS[group]}</span>
+              {detail && <span className="text-muted"> · {detail(group)}</span>}
+              <span className="block text-xs text-muted">{BACKUP_GROUP_HINTS[group]}</span>
+            </span>
+          </label>
+        );
+      })}
+    </fieldset>
+  );
+}
+
+/** „3 Spulen“, „1 Kunde“, „vorhanden“ … */
+function groupCount(group: BackupGroup, count: number) {
+  const unit = BACKUP_GROUP_UNITS[group];
+  if (!unit) return count ? 'vorhanden' : 'leer';
+  return `${count} ${count === 1 ? unit[0] : unit[1]}`;
+}
+
+const groupNames = (groups: BackupGroup[]) => groups.map((g) => BACKUP_GROUP_LABELS[g]).join(', ');
+
+/** Sichern und Einspielen, jeweils alles oder nur einzelne Bereiche */
 export function BackupCard() {
+  const [exportGroups, setExportGroups] = useState<BackupGroup[]>([...BACKUP_GROUPS]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const restore = useBackupImport();
+  const inspect = useBackupInspect();
+  const restore = useBackupRestore();
+  const [picked, setPicked] = useState<{ file: string; info: BackupInfo } | null>(null);
+  const [importGroups, setImportGroups] = useState<BackupGroup[]>([]);
   const input = useRef<HTMLInputElement>(null);
 
   const download = async () => {
     setBusy(true);
     setError(null);
     try {
-      setMessage(`${await downloadBackup()} heruntergeladen.`);
+      setMessage(`${await downloadBackup(exportGroups)} heruntergeladen.`);
     } catch (e) {
       setError(e);
     } finally {
@@ -233,52 +319,128 @@ export function BackupCard() {
     }
   };
 
-  const upload = (file: File | undefined) => {
+  const choose = (file: File | undefined) => {
     if (input.current) input.current.value = '';
     if (!file) return;
+    setMessage(null);
+    setError(null);
+    restore.reset();
+    inspect.mutate(file, {
+      onSuccess: (info) => {
+        setPicked({ file: file.name, info });
+        setImportGroups(info.groups.map((g) => g.group));
+      },
+    });
+  };
+
+  const run = () => {
+    if (!picked || !importGroups.length) return;
     if (
       !confirm(
-        `„${file.name}“ einspielen? Alle jetzigen Daten werden dabei durch das Backup ersetzt.`,
+        `Diese Bereiche werden durch das Backup ersetzt: ${groupNames(importGroups)}. Weiter?`,
       )
     )
       return;
-    setMessage(null);
-    restore.mutate(file, {
-      onSuccess: (r) =>
-        setMessage(`Backup eingespielt: ${r.spools} Spulen, ${r.projects} Projekte.`),
-    });
+    restore.mutate(
+      { token: picked.info.token, groups: importGroups },
+      {
+        onSuccess: (r) => {
+          setPicked(null);
+          const fixed = r.fixed
+            ? ` ${r.fixed} ${r.fixed === 1 ? 'Verweis' : 'Verweise'} auf nicht eingespielte Einträge entfernt.`
+            : '';
+          setMessage(`Backup eingespielt: ${groupNames(r.groups)}.${fixed}`);
+        },
+      },
+    );
   };
+
+  const available = picked?.info.groups.map((g) => g.group) ?? [];
+  const counts = new Map(picked?.info.groups.map((g) => [g.group, g.count]));
+  const partial = importGroups.length > 0 && importGroups.length < BACKUP_GROUPS.length;
 
   return (
     <Card className="mt-4 p-5">
       <h2 className="font-semibold">Backup</h2>
-      <p className="mb-3 text-sm text-muted">
-        Eine ZIP-Datei mit allen Daten, Rechnungen, Fotos und dem Logo – zum Sichern oder für den
-        Umzug auf ein anderes Gerät. Beim Einspielen wird alles ersetzt; der vorherige Stand bleibt
-        als Sicherheitskopie im Datenordner (backup/).
+      <p className="mb-4 text-sm text-muted">
+        Eine ZIP-Datei mit den Daten und den zugehörigen Belegen, PDFs und dem Logo – zum Sichern
+        oder für den Umzug auf ein anderes Gerät. Beim Einspielen werden nur die gewählten Bereiche
+        ersetzt; der vorherige Stand bleibt als Sicherheitskopie im Datenordner (backup/).
       </p>
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={download} disabled={busy}>
+
+      <h3 className="mb-2 text-sm font-semibold">Sichern</h3>
+      <BackupGroupChecks
+        name="Bereiche sichern"
+        selected={exportGroups}
+        onChange={setExportGroups}
+      />
+      <div className="mt-3">
+        <Button onClick={download} disabled={busy || !exportGroups.length}>
           <Download size={16} /> {busy ? 'Wird erstellt …' : 'Backup herunterladen'}
         </Button>
-        <Button onClick={() => input.current?.click()} disabled={restore.isPending}>
-          <Upload size={16} /> {restore.isPending ? 'Wird eingespielt …' : 'Backup einspielen'}
-        </Button>
-        <input
-          ref={input}
-          type="file"
-          accept=".zip,application/zip"
-          hidden
-          data-testid="backup-file"
-          onChange={(e) => upload(e.target.files?.[0])}
-        />
       </div>
+
+      <h3 className="mt-5 mb-2 text-sm font-semibold">Einspielen</h3>
+      {!picked ? (
+        <Button onClick={() => input.current?.click()} disabled={inspect.isPending}>
+          <Upload size={16} /> {inspect.isPending ? 'Wird geprüft …' : 'Backup-Datei wählen'}
+        </Button>
+      ) : (
+        <div className="rounded-lg border border-[var(--border)] p-3">
+          <p className="mb-3 text-sm break-words">
+            <span className="font-medium">{picked.file}</span>
+            {picked.info.createdAt && (
+              <span className="text-muted">
+                {' · erstellt '}
+                {new Date(picked.info.createdAt).toLocaleString('de-AT', {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                })}
+              </span>
+            )}
+          </p>
+          <BackupGroupChecks
+            name="Bereiche einspielen"
+            selected={importGroups}
+            onChange={setImportGroups}
+            available={available}
+            detail={(g) => (counts.has(g) ? groupCount(g, counts.get(g)!) : 'nicht im Backup')}
+          />
+          {partial && (
+            <p className="mt-3 text-xs text-muted">
+              Projekte verweisen auf Kunden, Team, Filament und Drucker, Spulen auf Lagerplätze.
+              Gibt es einen solchen Eintrag nach dem Einspielen nicht mehr, wird der Verweis
+              entfernt.
+            </p>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              variant="primary"
+              onClick={run}
+              disabled={restore.isPending || !importGroups.length}
+            >
+              <Upload size={16} /> {restore.isPending ? 'Wird eingespielt …' : 'Einspielen'}
+            </Button>
+            <Button variant="ghost" onClick={() => setPicked(null)} disabled={restore.isPending}>
+              Abbrechen
+            </Button>
+          </div>
+        </div>
+      )}
+      <input
+        ref={input}
+        type="file"
+        accept=".zip,application/zip"
+        hidden
+        data-testid="backup-file"
+        onChange={(e) => choose(e.target.files?.[0])}
+      />
       {message && (
         <p role="status" className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">
           {message}
         </p>
       )}
-      <ErrorText error={error ?? restore.error} />
+      <ErrorText error={error ?? inspect.error ?? restore.error} />
     </Card>
   );
 }

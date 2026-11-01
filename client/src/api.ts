@@ -1,5 +1,9 @@
 import {
   ACTIVE_PRINT_STATES,
+  BACKUP_GROUPS,
+  type BackupGroup,
+  type BackupInfo,
+  type BackupRestoreResult,
   type FilamentBooking,
   type HaCameraList,
   type HaStatus,
@@ -455,11 +459,15 @@ export function useBookings(printerId: number) {
   return { list, undo };
 }
 
-/** Komplettes Backup (ZIP) herunterladen */
-export async function downloadBackup() {
-  const res = await fetch(appUrl('/api/backup'), { redirect: 'manual' });
+/** Backup (ZIP) herunterladen – alles oder nur die gewählten Bereiche */
+export async function downloadBackup(groups: BackupGroup[]) {
+  const query = groups.length === BACKUP_GROUPS.length ? '' : `?groups=${groups.join(',')}`;
+  const res = await fetch(appUrl(`/api/backup${query}`), { redirect: 'manual' });
   if (res.type === 'opaqueredirect' || res.status === 401) loginExpired();
-  if (!res.ok) throw new ApiError(`Fehler ${res.status}`);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new ApiError(body?.error ?? `Fehler ${res.status}`);
+  }
   const name =
     /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ??
     'druckwerk-backup.zip';
@@ -472,15 +480,23 @@ export async function downloadBackup() {
   return name;
 }
 
-/** Backup einspielen: ersetzt alle Daten, danach wird alles neu geladen */
-export function useBackupImport() {
-  const qc = useQueryClient();
+/** Backup hochladen und anzeigen, was drin ist (noch nichts einspielen) */
+export function useBackupInspect() {
   return useMutation({
     mutationFn: (file: File) => {
       const form = new FormData();
       form.append('file', file);
-      return api.post<{ ok: true; spools: number; projects: number }>('/backup', form);
+      return api.post<BackupInfo>('/backup/inspect', form);
     },
+  });
+}
+
+/** Gewählte Bereiche aus dem hochgeladenen Backup einspielen, danach wird alles neu geladen */
+export function useBackupRestore() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { token: string; groups: BackupGroup[] }) =>
+      api.post<BackupRestoreResult>('/backup/restore', input),
     onSuccess: () => qc.invalidateQueries(),
   });
 }

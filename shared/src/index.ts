@@ -302,6 +302,7 @@ export function calcProjectCosts(
   return { filament, machine, extras, total: filament + machine + extras };
 }
 
+export * from './backup';
 export * from './camera';
 export * from './document';
 export * from './invoice';

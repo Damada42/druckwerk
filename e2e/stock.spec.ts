@@ -87,8 +87,12 @@ test('Herstellerliste: neuer Hersteller direkt im Spulen-Formular, danach in der
 });
 
 test('Backup: herunterladen und wieder einspielen', async ({ page, request }, info) => {
-  const before = ((await (await request.get('/api/spools')).json()) as unknown[]).length;
+  const spools = async () =>
+    ((await (await request.get('/api/spools')).json()) as unknown[]).length;
+  const before = await spools();
   await page.goto('/einstellungen');
+  const save = page.getByRole('group', { name: 'Bereiche sichern' });
+  await expect(save.getByRole('checkbox', { name: 'Alles' })).toBeChecked();
   const [download] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'Backup herunterladen' }).click(),
@@ -97,15 +101,46 @@ test('Backup: herunterladen und wieder einspielen', async ({ page, request }, in
   const file = info.outputPath('backup.zip');
   await download.saveAs(file);
 
-  page.once('dialog', (d) => d.accept());
+  // Nur Kunden und Filament sichern
+  await save.getByRole('checkbox', { name: 'Alles' }).uncheck();
+  await expect(page.getByRole('button', { name: 'Backup herunterladen' })).toBeDisabled();
+  await save.getByRole('checkbox', { name: /^Kunden/ }).check();
+  await save.getByRole('checkbox', { name: /^Filament/ }).check();
+  const [partial] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Backup herunterladen' }).click(),
+  ]);
+  expect(partial.suggestedFilename()).toMatch(/^druckwerk-backup-teil-\d+\.zip$/);
+  const partFile = info.outputPath('teil.zip');
+  await partial.saveAs(partFile);
+
+  // Vor dem Einspielen sieht man, was drin ist; nicht enthaltene Bereiche sind gesperrt
+  await page.getByTestId('backup-file').setInputFiles(partFile);
+  const load = page.getByRole('group', { name: 'Bereiche einspielen' });
+  await expect(load.getByText(`${before} Spulen`)).toBeVisible();
+  await expect(load.getByRole('checkbox', { name: /^Projekte/ })).toBeDisabled();
+  await expect(load.getByRole('checkbox', { name: /^Kunden/ })).toBeChecked();
+  await load.getByRole('checkbox', { name: /^Kunden/ }).uncheck();
+  page.once('dialog', (d) => {
+    expect(d.message()).toContain('ersetzt: Filament.');
+    void d.accept();
+  });
+  await page.getByRole('button', { name: 'Einspielen', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Backup eingespielt: Filament.');
+  expect(await spools()).toBe(before);
+
+  // Komplettes Backup: alles vorausgewählt
   await page.getByTestId('backup-file').setInputFiles(file);
-  await expect(page.getByRole('status')).toContainText(`Backup eingespielt: ${before} Spulen`);
+  await expect(load.getByRole('checkbox', { name: 'Alles' })).toBeChecked();
+  page.once('dialog', (d) => d.accept());
+  await page.getByRole('button', { name: 'Einspielen', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Backup eingespielt: Projekte, Kunden');
+  expect(await spools()).toBe(before);
 
   // Keine ZIP-Datei: verständliche Meldung, Daten bleiben
   const junk = info.outputPath('kaputt.zip');
   writeFileSync(junk, 'kein zip');
-  page.once('dialog', (d) => d.accept());
   await page.getByTestId('backup-file').setInputFiles(junk);
   await expect(page.getByText('Das ist keine ZIP-Datei von Druckwerk.')).toBeVisible();
-  expect(((await (await request.get('/api/spools')).json()) as unknown[]).length).toBe(before);
+  expect(await spools()).toBe(before);
 });

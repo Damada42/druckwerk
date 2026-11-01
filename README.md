@@ -251,9 +251,13 @@ mit den gängigen Herstellern vorbefüllt), damit keine Tippfehler doppelte Sort
 Hersteller lässt sich direkt im Formular über „Neuer Hersteller …“ eintragen; „bambu lab“ wird zu
 „Bambu Lab“. Umbenennen in den Einstellungen ändert alle Spulen mit.
 
-**Backup:** Unter „Einstellungen → Backup“ lädt „Backup herunterladen“ eine ZIP-Datei mit allen Daten,
-Rechnungen, Fotos und dem Logo. „Backup einspielen“ ersetzt alles durch den Stand der Datei (auch aus
-älteren Versionen); der vorherige Stand bleibt als Sicherheitskopie im Datenordner unter `backup/`.
+**Backup:** Unter „Einstellungen → Backup“ lädt „Backup herunterladen“ eine ZIP-Datei mit den Daten
+samt Belegen, PDFs und Logo. Per Häkchen lässt sich alles oder nur ein Teil sichern: Projekte, Kunden,
+Team, Filament, Lager, Drucker, Firmendaten und Einstellungen. Beim Einspielen zeigt Druckwerk zuerst,
+was in der Datei steckt (z.B. „12 Projekte“, „40 Spulen“); ersetzt werden nur die angehakten Bereiche
+(auch aus älteren Versionen). Verweist danach etwas auf einen Eintrag, den es nicht mehr gibt (ein
+Projekt auf einen Kunden, wenn nur die Kunden eingespielt wurden), wird der Verweis entfernt. Der
+vorherige Stand bleibt als Sicherheitskopie im Datenordner unter `backup/`.
 
 **Klipper-Drucker:** Drucker mit Klipper, die in Home Assistant über die Integration „Moonraker“
 eingebunden sind, lassen sich wie der P1S verknüpfen. Druckwerk zeigt dann Status, Fortschritt,
