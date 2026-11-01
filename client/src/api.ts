@@ -36,7 +36,7 @@ import type {
   StorageLocation,
   ProjectWithDetails,
 } from '@3dapp/shared';
-import { appUrl } from './base';
+import { appUrl, underIngress } from './base';
 import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 
 export class ApiError extends Error {}
@@ -47,8 +47,16 @@ const RELOAD_KEY = 'druckwerk.authReload';
  * Läuft die App hinter einem Login-Proxy (Authentik), antwortet dieser nach Ablauf der Sitzung
  * mit einer Weiterleitung zur Anmeldung. Dann die Seite neu laden – der Seitenaufruf führt zum
  * Login. Höchstens einmal pro Minute, damit ein falsch eingerichteter Proxy keine Schleife baut.
+ *
+ * Unter Home-Assistant-Ingress nie neu laden: Ist die Ingress-Sitzung abgelaufen (Tab lange im
+ * Hintergrund, PC im Ruhezustand), antwortet HA mit 401. Ein Neuladen würde dann nur HAs Seite
+ * „401: Unauthorized“ zeigen. Das HA-Frontend erneuert die Sitzung von selbst, sobald die Seite
+ * wieder sichtbar ist; die Abfragen laufen danach einfach weiter.
  */
 function loginExpired(): never {
+  if (underIngress) {
+    throw new ApiError('Verbindung zu Home Assistant unterbrochen – wird gleich wieder aufgebaut.');
+  }
   let last = 0;
   try {
     last = Number(sessionStorage.getItem(RELOAD_KEY) ?? 0);

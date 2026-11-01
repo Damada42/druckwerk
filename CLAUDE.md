@@ -34,7 +34,7 @@ Env vars: `API_PORT` (default 3000; deliberately not `PORT`, which the preview t
 - The Docker container sits behind Cloudflare Tunnel → Authentik proxy outpost (login with MFA). The container serves plain HTTP (`HTTPS=false`, `TRUST_PROXY=true`, data in `/data`).
 - The app has no auth of its own, so it must never be exposed without the proxy.
 - Proxy constraints:
-  - `request()` in `api.ts` fetches with `redirect: 'manual'`. An opaque redirect means the Authentik session expired, and the page reloads at most once a minute (`e2e/proxy.spec.ts`).
+  - `request()` in `api.ts` fetches with `redirect: 'manual'`. An opaque redirect means the Authentik session expired, and the page reloads at most once a minute (`e2e/proxy.spec.ts`). Under HA ingress a 401 never reloads: it means the ingress session cookie expired (tab long in the background), and reloading the iframe only shows HA's bare "401: Unauthorized" page. The HA frontend renews the session itself and the queries' retries recover (`e2e/ingress.spec.ts`).
   - The service worker must not serve navigations from cache (`navigateFallback: null`), otherwise Authentik can't redirect to the login.
 - `GET /api/health` is the Docker healthcheck.
 - `npm run export -w server` writes a consistent DB copy plus uploads to `server/data/export/` for moving data into the container.

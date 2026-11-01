@@ -52,3 +52,25 @@ test('Als Home-Assistant-App: Seiten, Daten und Bilder bleiben unter dem Ingress
 
   expect(outside).toEqual([]);
 });
+
+test('Als Home-Assistant-App: abgelaufene Ingress-Sitzung lädt nicht neu, Daten kommen wieder', async ({
+  page,
+}) => {
+  // HA antwortet bei abgelaufener Sitzung mit 401, bis das HA-Frontend sie erneuert hat
+  let blocked = 0;
+  await page.route('**/api/customers', async (route) => {
+    if (blocked >= 2) return route.continue();
+    blocked++;
+    await route.fulfill({ status: 401, contentType: 'text/plain', body: '401: Unauthorized' });
+  });
+  await page.goto(`${BASE}/kunden`);
+  let navigations = 0;
+  page.on('framenavigated', (f) => {
+    if (f === page.mainFrame()) navigations++;
+  });
+
+  // Die Wiederholungen holen die Daten, sobald die Sitzung wieder gilt; neu geladen wird nie
+  await expect(page.getByText('Ingress Kunde')).toBeVisible({ timeout: 15_000 });
+  expect(blocked).toBe(2);
+  expect(navigations).toBe(0);
+});
