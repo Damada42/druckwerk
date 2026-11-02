@@ -2,6 +2,7 @@ import {
   findPrinterDevices,
   maskUrl,
   parsePrinterLive,
+  printerFromDevice,
   type FilamentBooking,
   type FilamentSpool,
   type HaEntity,
@@ -76,6 +77,21 @@ describe('Live-Status aus Home-Assistant-Daten', () => {
     expect(findPrinterDevices(toEntities(FIXTURE))).toEqual([
       { id: DEVICE, name: 'the_one', model: 'P1S' },
     ]);
+  });
+
+  it('schlägt Name und Modell mit Hersteller für einen neuen Drucker vor', () => {
+    const withMaker = toEntities(FIXTURE).map((e) => ({ ...e, manufacturer: 'Bambu Lab' }));
+    const [device] = findPrinterDevices(withMaker);
+    expect(device.manufacturer).toBe('Bambu Lab');
+    expect(printerFromDevice(device)).toEqual({ name: 'the_one', model: 'Bambu Lab P1S' });
+    // Steht der Hersteller schon im Modell, nicht doppelt
+    expect(
+      printerFromDevice({ id: 'x', name: 'A20', model: 'Geeetech A20', manufacturer: 'Geeetech' }),
+    ).toEqual({ name: 'A20', model: 'Geeetech A20' });
+    expect(printerFromDevice({ id: 'x', name: 'X1', model: 'Klipper' })).toEqual({
+      name: 'X1',
+      model: 'Klipper',
+    });
   });
 
   it('versteht englische Entity-Namen und zeigt Offline an', () => {

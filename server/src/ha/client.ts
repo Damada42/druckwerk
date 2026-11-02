@@ -23,7 +23,7 @@ export const PRINTER_TEMPLATE = `{%- set keys = ['slot','active','empty','color'
 {%- set s = states[e] -%}
 {%- set a = namespace(v={}) -%}
 {%- if s -%}{%- for k in keys if s.attributes[k] is defined and (k != 'options' or e.startswith('select.')) -%}{%- set a.v = dict(a.v, **{k: (s.attributes[k] | list) if k == 'options' else s.attributes[k]}) -%}{%- endfor -%}{%- endif -%}
-{%- set ns.out = ns.out + [{'e': e, 's': s.state if s else none, 'a': a.v, 'd': d, 'v': device_attr(d, 'via_device_id') if d else none, 'n': (device_attr(d, 'name_by_user') or device_attr(d, 'name')) if d else none, 'm': device_attr(d, 'model') if d else none, 'p': p}] -%}
+{%- set ns.out = ns.out + [{'e': e, 's': s.state if s else none, 'a': a.v, 'd': d, 'v': device_attr(d, 'via_device_id') if d else none, 'n': (device_attr(d, 'name_by_user') or device_attr(d, 'name')) if d else none, 'm': device_attr(d, 'model') if d else none, 'mf': device_attr(d, 'manufacturer') if d else none, 'p': p}] -%}
 {%- endfor -%}
 {%- endfor -%}
 {{ ns.out | tojson }}`;
@@ -47,6 +47,8 @@ interface RawEntity {
   v: string | null;
   n: string | null;
   m: string | null;
+  /** Hersteller des Geräts, z.B. „Bambu Lab“ */
+  mf?: string | null;
   /** Integration (bambu_lab oder moonraker) */
   p?: string;
 }
@@ -180,6 +182,7 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch, supervis
         viaDeviceId: r.v,
         deviceName: r.n,
         model: r.m,
+        manufacturer: r.mf ?? null,
         platform: r.p ?? 'bambu_lab',
         connectionId: conn.id,
       }));

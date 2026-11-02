@@ -1,5 +1,6 @@
 import {
   calcPrinterHourly,
+  printerFromDevice,
   type HaPrinterDevice,
   type Printer,
   type PrinterHourlyCosts,
@@ -145,6 +146,10 @@ function haField(devices: HaPrinterDevice[], current: string | null | undefined)
   }));
   if (current && !devices.some((d) => d.id === current))
     options.push({ value: current, label: 'Bisheriges Gerät (gerade nicht gefunden)' });
+  const suggest = (id: unknown) => {
+    const device = devices.find((d) => d.id === id);
+    return device ? printerFromDevice(device) : null;
+  };
   return [
     {
       key: 'haDeviceId',
@@ -152,6 +157,19 @@ function haField(devices: HaPrinterDevice[], current: string | null | undefined)
       type: 'select',
       wide: true,
       options,
+      // Name und Modell aus dem Gerät übernehmen – nur leere Felder oder solche, die noch den
+      // Vorschlag des vorher gewählten Geräts enthalten; Eingetipptes bleibt stehen
+      onChange: (id, previous) => {
+        const next = suggest(id);
+        if (!next) return {};
+        const before = suggest(previous.haDeviceId);
+        const out: Record<string, unknown> = {};
+        for (const key of ['name', 'model'] as const) {
+          const current = previous[key];
+          if (!current || current === before?.[key]) out[key] = next[key];
+        }
+        return out;
+      },
     },
   ];
 }

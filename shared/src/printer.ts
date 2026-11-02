@@ -11,6 +11,8 @@ export interface HaEntity {
   viaDeviceId: string | null;
   deviceName: string | null;
   model: string | null;
+  /** Hersteller des Geräts in Home Assistant, z.B. „Bambu Lab“ */
+  manufacturer?: string | null;
   /** Von welcher Home-Assistant-Verbindung (Standort) die Entity stammt */
   connectionId?: number;
   /** Integration: „bambu_lab“ (Standard, auch wenn es fehlt) oder „moonraker“ (Klipper) */
@@ -25,6 +27,8 @@ export interface HaPrinterDevice {
   id: string;
   name: string;
   model: string;
+  /** Hersteller, z.B. „Bambu Lab“ (fehlt, wenn Home Assistant keinen kennt) */
+  manufacturer?: string;
   /** Standort-Name der Verbindung, z.B. „Zuhause“ */
   location?: string;
 }
@@ -224,9 +228,23 @@ export function findPrinterDevices(entities: HaEntity[]): HaPrinterDevice[] {
       id: e.deviceId,
       name: e.deviceName ?? e.deviceId,
       model: e.model ?? '',
+      ...(e.manufacturer ? { manufacturer: e.manufacturer } : {}),
     });
   }
   return [...devices.values()];
+}
+
+/**
+ * Vorschlag für Name und Modell eines neuen Druckers aus dem Home-Assistant-Gerät:
+ * Modell mit Hersteller davor („Bambu Lab P1S“), außer das Modell nennt ihn schon.
+ */
+export function printerFromDevice(device: HaPrinterDevice): { name: string; model: string } {
+  const { manufacturer, model } = device;
+  const full =
+    manufacturer && !model.toLowerCase().startsWith(manufacturer.toLowerCase())
+      ? `${manufacturer} ${model}`.trim()
+      : model;
+  return { name: device.name, model: full };
 }
 
 /** Bambu oder Klipper – an der Integration der Entities des Geräts erkannt */
