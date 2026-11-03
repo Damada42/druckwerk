@@ -357,6 +357,16 @@ describe('Home-Assistant-Anbindung über die API', () => {
     expect(spools.find((s) => s.id === b)?.haTrayEntity).toBe(SLOT(2));
   });
 
+  it('meldet, in welchem Drucker und Slot eine Spule steckt', async () => {
+    expect((await json('GET', '/api/ams-slots')).body).toEqual({});
+    await connect();
+    await linkPrinter();
+    const printer = (await json<{ name: string }>('GET', '/api/printers/1')).body;
+    const places = (await json<Record<string, unknown>>('GET', '/api/ams-slots')).body;
+    expect(places[SLOT(3)]).toEqual({ printerId: 1, printerName: printer.name, slotLabel: 'A3' });
+    expect(Object.keys(places)).toHaveLength(4);
+  });
+
   it('übernimmt den Slot nicht beim Kopieren oder Bearbeiten einer Spule', async () => {
     const a = await spool('Schwarz', 1);
     const original = (await json<FilamentSpool>('GET', `/api/spools/${a}`)).body;

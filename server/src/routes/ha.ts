@@ -9,6 +9,7 @@ import {
   type HaStatus,
   type PrinterAction,
   type PrinterLiveResponse,
+  type SlotPlace,
 } from '@3dapp/shared';
 import { desc, eq } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -97,6 +98,29 @@ export function registerHaRoutes(app: FastifyInstance, db: Db, ha: HaClient) {
       }
     },
   );
+
+  /**
+   * Slot-Entity → Drucker und Slot, damit Lager und Filament zeigen können, wo eine
+   * zugeordnete Spule gerade steckt. Nicht erreichbare Standorte fehlen einfach.
+   */
+  app.get('/ams-slots', async (): Promise<Record<string, SlotPlace>> => {
+    const printers = db.select().from(schema.printers).all();
+    if (!ha.configured() || !printers.some((p) => p.haDeviceId)) return {};
+    let entities;
+    try {
+      ({ entities } = await ha.entities());
+    } catch (e) {
+      fail(e);
+      return {};
+    }
+    const places: Record<string, SlotPlace> = {};
+    for (const p of printers) {
+      if (!p.haDeviceId || !entities.some((e) => e.deviceId === p.haDeviceId)) continue;
+      for (const slot of parsePrinterLive(entities, p.haDeviceId).ams)
+        places[slot.entityId] = { printerId: p.id, printerName: p.name, slotLabel: slot.label };
+    }
+    return places;
+  });
 
   /**
    * Bilder des Auftrags über den Server, damit der Browser keinen Token braucht:

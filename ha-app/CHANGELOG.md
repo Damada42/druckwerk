@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.8.4
+
+- Spulen-Auswahl am AMS-Slot nennt den Lagerplatz jeder Spule, bzw. in welchem Slot sie schon steckt.
+- Unter einer zugeordneten Spule steht ihr Lagerplatz – so weißt du beim Wechseln, wohin sie zurückgehört.
+- Lager: jede Spule zeigt ihr Finish (Basic, Matt …) und, wenn sie in Verwendung ist,
+  in welchem Drucker und Slot sie gerade steckt.
+
 ## 0.8.3
 
 - Spulen-Auswahl am AMS-Slot zeigt nur Spulen mit Typ, Hersteller und Finish aus dem Slot

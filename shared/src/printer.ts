@@ -80,6 +80,14 @@ export interface AmsSlot {
   active: boolean;
 }
 
+/** Wo eine zugeordnete Spule gerade steckt (für Lager und Filament) */
+export interface SlotPlace {
+  printerId: number;
+  printerName: string;
+  /** „A1“, „Extern“ oder „Spule“ (Klipper) */
+  slotLabel: string;
+}
+
 export interface PrinterLive {
   kind: PrinterKind;
   online: boolean;

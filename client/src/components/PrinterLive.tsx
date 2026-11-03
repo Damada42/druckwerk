@@ -35,6 +35,7 @@ import {
   usePrinterControl,
   usePrinterLive,
 } from '../api';
+import { useSpoolPlace } from './spoolPlace';
 import { Button, ColorDot, ErrorText, Modal, Select, cx, dateDe, grams } from './ui';
 
 const STATE_STYLE: Record<PrintState, string> = {
@@ -498,15 +499,25 @@ function SlotSpoolSelect({
   onChange: (spoolId: number | null) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
+  const place = useSpoolPlace();
   const { want, matching, others } = spoolsForSlot(slot, spools, types, finishes, linked?.id);
   // Ohne passende Spule oder mit einer unpassend zugeordneten gleich alles zeigen
   const all = showAll || !matching.length || (!!linked && !matching.includes(linked));
   const hint = [want.typeName, want.manufacturer, want.finishName].filter(Boolean).join(' · ');
-  const option = (s: FilamentSpool) => (
-    <option key={s.id} value={s.id}>
-      {spoolLabel(s, types, finishes)}
-    </option>
-  );
+  // Steckt die Spule schon in einem anderen Slot, das zeigen, sonst ihren Lagerplatz
+  const where = (s: FilamentSpool) => {
+    if (s.haTrayEntity && s.haTrayEntity !== slot.entityId) return `steckt in ${place.inUse(s)}`;
+    return place.storage(s);
+  };
+  const option = (s: FilamentSpool) => {
+    const at = where(s);
+    return (
+      <option key={s.id} value={s.id}>
+        {spoolLabel(s, types, finishes)}
+        {at && ` · ${at}`}
+      </option>
+    );
+  };
 
   return (
     <Select
@@ -558,6 +569,7 @@ function AmsSlots({
   const { data: finishes = [] } = useList('finishes');
   const link = useAmsLink();
   const importSpool = useAmsImport(printerId);
+  const place = useSpoolPlace();
 
   return (
     <div>
@@ -621,6 +633,11 @@ function AmsSlots({
                     </Button>
                   )}
                 </div>
+              )}
+              {linked && place.storage(linked) && (
+                <p className="mt-1.5 text-xs text-muted">
+                  Lagerplatz: <span className="font-medium">{place.storage(linked)}</span>
+                </p>
               )}
               {linked?.notes?.startsWith('Aus AMS') && linked.colorName && (
                 <p className="mt-1.5 text-xs text-muted">

@@ -9,6 +9,7 @@ import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2, X } from 'lucide-react
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useList, useSave, useSettings, useStorageOrder } from '../api';
+import { useSpoolPlace } from '../components/spoolPlace';
 import {
   Button,
   Card,
@@ -321,17 +322,28 @@ function SpoolPlaceRow({
   locations: StorageLocation[];
 }) {
   const { data: types = [] } = useList('filament-types');
+  const { data: finishes = [] } = useList('finishes');
   const { save } = useSave('spools');
+  const { inUse } = useSpoolPlace();
   const type = types.find((t) => t.id === s.typeId)?.name;
+  const finish = finishes.find((f) => f.id === s.finishId)?.name ?? 'Normal';
   const label = `${type ?? ''} ${s.manufacturer} ${s.colorName}`.trim();
+  const usedIn = inUse(s);
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 text-sm">
       <ColorDot color={s.colorHex} size={18} />
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{label}</div>
+        <div className="truncate font-medium">
+          {label} <span className="font-normal text-muted">· {finish}</span>
+        </div>
         <div className="text-xs text-muted">
           {grams(s.weightRemainingG)} übrig
-          {s.haTrayEntity && ' · gerade am Drucker'}
+          {usedIn && (
+            <>
+              {' · '}
+              <span className="font-medium text-accent">in Verwendung: {usedIn}</span>
+            </>
+          )}
           {!s.storageLocationId && s.location && ` · bisher: ${s.location}`}
         </div>
       </div>

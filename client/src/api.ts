@@ -12,6 +12,7 @@ import {
   type PrinterAction,
   type PrinterLiveResponse,
   type PrintSpeed,
+  type SlotPlace,
 } from '@3dapp/shared';
 import type {
   BarcodeLookup,
@@ -400,6 +401,16 @@ export function usePrinterControl(printerId: number) {
     // Home Assistant braucht einen Moment, bis der Drucker den neuen Zustand meldet
     onSuccess: () =>
       setTimeout(() => qc.invalidateQueries({ queryKey: ['printer-live', printerId] }), 1500),
+  });
+}
+
+/** Wo zugeordnete Spulen stecken (Slot-Entity → Drucker und Slot) */
+export function useSlotPlaces(enabled = true) {
+  return useQuery({
+    queryKey: ['ams-slots'],
+    queryFn: () => api.get<Record<string, SlotPlace>>('/ams-slots'),
+    enabled,
+    staleTime: 60_000,
   });
 }
 
