@@ -308,5 +308,6 @@ export * from './document';
 export * from './invoice';
 export * from './label';
 export * from './printer';
+export * from './slotMatch';
 export * from './stock';
 export * from './storage';

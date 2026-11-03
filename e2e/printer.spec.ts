@@ -124,7 +124,9 @@ test('AMS-Spule mit einem Klick in den Bestand übernehmen', async ({ page, requ
   await card.getByRole('button', { name: 'A3 in Bestand übernehmen' }).click();
   // Danach ist die neue Spule im Slot gewählt und der Knopf verschwindet
   const select = card.getByLabel('Spule in A3');
-  await expect(select.locator('option:checked')).toHaveText(/Bambu Lab PLA Dunkelblau · 610 g/);
+  await expect(select.locator('option:checked')).toHaveText(
+    /Bambu Lab PLA Dunkelblau · Normal · 610 g/,
+  );
   await expect(card.getByRole('button', { name: 'A3 in Bestand übernehmen' })).toBeHidden();
   await expect(card.getByText('Im Bestand als „Dunkelblau“')).toBeVisible();
 

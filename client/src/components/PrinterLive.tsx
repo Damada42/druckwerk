@@ -5,9 +5,11 @@ import {
   type AmsSlot,
   type FilamentSpool,
   type FilamentType,
+  type Finish,
   type Printer,
   type PrinterLive,
   type PrintState,
+  spoolsForSlot,
 } from '@3dapp/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -461,9 +463,84 @@ function SkipDialog({
   );
 }
 
-function spoolLabel(s: FilamentSpool, types: FilamentType[]) {
+function spoolLabel(s: FilamentSpool, types: FilamentType[], finishes: Finish[] = []) {
   const type = types.find((t) => t.id === s.typeId)?.name ?? '';
-  return `${s.manufacturer} ${type} ${s.colorName} · ${grams(s.weightRemainingG)}`;
+  const name = `${s.manufacturer} ${type} ${s.colorName}`;
+  if (!finishes.length) return `${name} · ${grams(s.weightRemainingG)}`;
+  const finish = finishes.find((f) => f.id === s.finishId)?.name ?? 'Normal';
+  return `${name} · ${finish} · ${grams(s.weightRemainingG)}`;
+}
+
+const SHOW_ALL = '__alle';
+
+/**
+ * Auswahl der Spule für einen Slot: nur Spulen mit Typ, Hersteller und Finish aus dem Slot,
+ * nach Farbnähe sortiert. Der restliche Bestand lässt sich bei Bedarf dazuschalten
+ * (z.B. für Fremdspulen, die das AMS als „Generic“ oder falsch meldet).
+ */
+function SlotSpoolSelect({
+  slot,
+  label,
+  linked,
+  spools,
+  types,
+  finishes,
+  disabled,
+  onChange,
+}: {
+  slot: AmsSlot;
+  label: string;
+  linked: FilamentSpool | undefined;
+  spools: FilamentSpool[];
+  types: FilamentType[];
+  finishes: Finish[];
+  disabled: boolean;
+  onChange: (spoolId: number | null) => void;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const { want, matching, others } = spoolsForSlot(slot, spools, types, finishes, linked?.id);
+  // Ohne passende Spule oder mit einer unpassend zugeordneten gleich alles zeigen
+  const all = showAll || !matching.length || (!!linked && !matching.includes(linked));
+  const hint = [want.typeName, want.manufacturer, want.finishName].filter(Boolean).join(' · ');
+  const option = (s: FilamentSpool) => (
+    <option key={s.id} value={s.id}>
+      {spoolLabel(s, types, finishes)}
+    </option>
+  );
+
+  return (
+    <Select
+      aria-label={label}
+      className="min-w-0 flex-1 !py-1.5 !text-xs"
+      value={linked?.id ?? ''}
+      disabled={disabled}
+      onChange={(e) => {
+        if (e.target.value === SHOW_ALL) setShowAll(true);
+        else onChange(e.target.value ? Number(e.target.value) : null);
+      }}
+    >
+      <option value="">Spule aus dem Bestand zuordnen…</option>
+      {matching.length > 0 && hint ? (
+        <optgroup label={`Passend: ${hint}`}>{matching.map(option)}</optgroup>
+      ) : (
+        matching.map(option)
+      )}
+      {all && others.length > 0 && (
+        <optgroup
+          label={
+            matching.length
+              ? 'Weitere Spulen'
+              : `Keine Spule passt zu ${hint || 'diesem Slot'} – alle Spulen`
+          }
+        >
+          {others.map(option)}
+        </optgroup>
+      )}
+      {!all && others.length > 0 && (
+        <option value={SHOW_ALL}>Alle Spulen anzeigen ({others.length} weitere)…</option>
+      )}
+    </Select>
+  );
 }
 
 /** AMS-Slots bzw. bei Klipper der eine Platz „Spule“ für die Spule im Drucker */
@@ -478,6 +555,7 @@ function AmsSlots({
 }) {
   const { data: spools = [] } = useList('spools');
   const { data: types = [] } = useList('filament-types');
+  const { data: finishes = [] } = useList('finishes');
   const link = useAmsLink();
   const importSpool = useAmsImport(printerId);
 
@@ -489,17 +567,6 @@ function AmsSlots({
       <ul className="grid gap-2">
         {slots.map((slot) => {
           const linked = spools.find((s) => s.haTrayEntity === slot.entityId);
-          // Passender Typ zuerst, dann der Rest
-          const sorted = [...spools]
-            .filter((s) => s.weightRemainingG > 0 || s.id === linked?.id)
-            .sort((a, b) => {
-              const match = (s: FilamentSpool) =>
-                types.find((t) => t.id === s.typeId)?.name.toLowerCase() ===
-                slot.type?.toLowerCase()
-                  ? 0
-                  : 1;
-              return match(a) - match(b);
-            });
           return (
             <li
               key={slot.entityId}
@@ -531,25 +598,16 @@ function AmsSlots({
               </div>
               {!slot.empty && (
                 <div className="mt-2 flex gap-2">
-                  <Select
-                    aria-label={klipper ? 'Spule im Drucker' : `Spule in ${slot.label}`}
-                    className="min-w-0 flex-1 !py-1.5 !text-xs"
-                    value={linked?.id ?? ''}
+                  <SlotSpoolSelect
+                    slot={slot}
+                    label={klipper ? 'Spule im Drucker' : `Spule in ${slot.label}`}
+                    linked={linked}
+                    spools={spools}
+                    types={types}
+                    finishes={finishes}
                     disabled={link.isPending}
-                    onChange={(e) =>
-                      link.mutate({
-                        entityId: slot.entityId,
-                        spoolId: e.target.value ? Number(e.target.value) : null,
-                      })
-                    }
-                  >
-                    <option value="">Spule aus dem Bestand zuordnen…</option>
-                    {sorted.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {spoolLabel(s, types)}
-                      </option>
-                    ))}
-                  </Select>
+                    onChange={(spoolId) => link.mutate({ entityId: slot.entityId, spoolId })}
+                  />
                   {/* Übernehmen braucht die Angaben aus dem AMS – Klipper kennt die Spule nicht */}
                   {!linked && slot.type && (
                     <Button
