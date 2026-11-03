@@ -44,7 +44,7 @@ Env vars: `API_PORT` (default 3000; deliberately not `PORT`, which the preview t
 
 HA renamed add-ons to "Apps" in 2026.2; use that term with the user. The same Docker image runs as a Docker container and as an HA App.
 
-- This repo is the App repository: `repository.yaml` at the root, the App in `ha-app/` (`config.yaml`, `DOCS.md`). The Supervisor pulls `ghcr.io/damada42/druckwerk:<version from ha-app/config.yaml>`; CI tags the image with that version. HA only offers an update after that version is bumped.
+- This repo is the App repository: `repository.yaml` at the root, the App in `ha-app/` (`config.yaml`, `DOCS.md`). The Supervisor pulls `ghcr.io/damada42/druckwerk:<version from ha-app/config.yaml>`; CI tags the image with that version. HA only offers an update after that version is bumped. With every bump, add a user-facing German entry at the top of `ha-app/CHANGELOG.md`; HA shows it in the update dialog.
 - Ingress serves the App under `/api/hassio_ingress/<token>/` and strips that prefix before the request reaches the server, sending it in `X-Ingress-Path`. Because of this:
   - `client/index.html` has `<base href="/" />`. `withBase` in `app.ts` replaces it with the ingress path (the header is validated first), so index.html is always served through `sendIndex` (`index: false` on @fastify/static).
   - Every URL in the client must be relative. Use `appUrl('/api/…')` from `client/src/base.ts` for fetches and `<img src>`, and plain relative paths for static files. Vite builds with `base: './'`, and the router gets `basename` from `document.baseURI`. Under ingress no service worker is registered.
