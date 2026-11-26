@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.11.1
+
+- Neues Ersatzteil: Der Hersteller des Teils zeigt gleich dessen Druckermodelle zum Antippen –
+  kein zweites Mal Hersteller wählen. Modelle anderer Hersteller lassen sich darunter dazuwählen.
+- Fehlt der Hersteller noch, lassen sich Hersteller und Modell direkt beim Ersatzteil anlegen.
+- Behoben: Ein Klick neben die Modell-Chips schaltete den ersten Chip um.
+
 ## 0.11.0
 
 - Neu: **Druckermodelle** unter Einstellungen – eine Liste je Hersteller, schon mit gängigen Modellen

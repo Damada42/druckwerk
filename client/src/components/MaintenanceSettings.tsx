@@ -252,7 +252,9 @@ function NotifySettings({ hasHa }: { hasHa: boolean }) {
 export function MaintenanceCard() {
   const { data: settings } = useSettings();
   const saveSettings = useSaveSettings();
-  const on = !!settings?.maintenance;
+  // Lokal, damit das Häkchen sofort umspringt (der Cache folgt erst einen Moment später)
+  const [switching, setSwitching] = useState<boolean | null>(null);
+  const on = switching ?? !!settings?.maintenance;
   const { data: ha } = useHaStatus();
   const hasHa = (ha?.connections.length ?? 0) > 0;
 
@@ -267,7 +269,13 @@ export function MaintenanceCard() {
           className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
           checked={on}
           disabled={!settings}
-          onChange={(e) => saveSettings.mutate({ maintenance: e.target.checked })}
+          onChange={(e) => {
+            setSwitching(e.target.checked);
+            saveSettings.mutate(
+              { maintenance: e.target.checked },
+              { onSettled: () => setSwitching(null) },
+            );
+          }}
         />
         <span>
           <span className="font-medium">Ersatzteile und Wartungsplan</span>

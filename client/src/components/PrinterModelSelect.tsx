@@ -65,10 +65,13 @@ function MakerSelect({
 /** Neues Modell direkt anlegen (landet in der Liste unter Einstellungen) */
 function NewModel({
   manufacturerId,
+  manufacturer,
   onCreated,
   onCancel,
 }: {
-  manufacturerId: number;
+  manufacturerId?: number;
+  /** Hersteller, der noch nicht in der Liste steht: der Server legt ihn mit dem Modell an */
+  manufacturer?: string;
   onCreated: (model: PrinterModel) => void;
   onCancel: () => void;
 }) {
@@ -76,7 +79,7 @@ function NewModel({
   const { save } = useSave('printer-models');
   const create = () =>
     name.trim() &&
-    save.mutate({ manufacturerId, name: name.trim() } as never, {
+    save.mutate({ manufacturerId, manufacturer, name: name.trim() } as never, {
       onSuccess: (m) => onCreated(m as PrinterModel),
     });
   return (
@@ -210,22 +213,36 @@ export function PrinterModelSelect({
 
 /**
  * Mehrere Druckermodelle wählen (z.B. für ein Ersatzteil): Gewählte stehen als Chips oben, darunter
- * nach Wahl des Herstellers dessen Modelle zum An- und Abwählen.
+ * die Modelle eines Herstellers zum An- und Abwählen. Der Hersteller folgt dem des Teils
+ * (makerName); für Teile von Drittanbietern lässt sich darunter ein anderer wählen.
  */
 export function PrinterModelsSelect({
   value,
   onChange,
+  makerName,
 }: {
   value: number[];
   onChange: (ids: number[]) => void;
+  makerName?: string;
 }) {
   const { data: models = [] } = useList('printer-models');
+  const { data: manufacturers = [] } = useList('manufacturers');
   const chosen = models.filter((m) => value.includes(m.id));
-  const [maker, setMaker] = useState<number | null>(chosen[0]?.manufacturerId ?? null);
-  const [adding, setAdding] = useState(false);
+  const name = (makerName ?? '').trim();
+  const partMaker = manufacturers.find((m) => m.name.toLowerCase() === name.toLowerCase());
+  const partMakerHasModels = !!partMaker && models.some((m) => m.manufacturerId === partMaker.id);
+  // Eigene Wahl gilt, bis sich der Hersteller des Teils ändert
+  const [picked, setPicked] = useState<{ id: number | null; for: string } | null>(null);
+  const own = picked?.for === name ? picked : null;
+  const maker =
+    own?.id ??
+    (own ? null : partMakerHasModels ? partMaker.id : (chosen[0]?.manufacturerId ?? null));
+  const [adding, setAdding] = useState<number | string | null>(null);
   const ofMaker = models.filter((m) => m.manufacturerId === maker);
   const toggle = (id: number) =>
     onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
+  // Hersteller des Teils hat (noch) keine Modelle, z.B. gerade neu eingetragen
+  const offerPartMaker = !!name && !partMakerHasModels && maker === null;
 
   return (
     <div className="space-y-2">
@@ -249,17 +266,13 @@ export function PrinterModelsSelect({
           ))}
         </div>
       )}
-      <MakerSelect
-        models={models}
-        label="Hersteller für passende Modelle"
-        value={maker}
-        onChange={(id) => {
-          setMaker(id);
-          setAdding(!!id && !models.some((m) => m.manufacturerId === id));
-        }}
-      />
       {maker && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5" aria-label="Modelle">
+          {maker !== partMaker?.id && (
+            <span className="self-center text-xs text-muted">
+              {manufacturers.find((m) => m.id === maker)?.name}:
+            </span>
+          )}
           {ofMaker.map((m) => {
             const on = value.includes(m.id);
             return (
@@ -279,10 +292,10 @@ export function PrinterModelsSelect({
               </button>
             );
           })}
-          {!adding && (
+          {adding !== maker && (
             <button
               type="button"
-              onClick={() => setAdding(true)}
+              onClick={() => setAdding(maker)}
               className="rounded-full border border-dashed border-line px-2.5 py-1 text-sm text-muted hover:border-accent"
             >
               ＋ Neues Modell
@@ -290,21 +303,50 @@ export function PrinterModelsSelect({
           )}
         </div>
       )}
-      {maker && adding && (
+      {offerPartMaker && adding !== name && (
+        <button
+          type="button"
+          onClick={() => setAdding(name)}
+          className="rounded-full border border-dashed border-line px-2.5 py-1 text-sm text-muted hover:border-accent"
+        >
+          ＋ Modell von {partMaker?.name ?? name} anlegen
+        </button>
+      )}
+      {adding !== null && (adding === maker || (offerPartMaker && adding === name)) && (
         <NewModel
-          manufacturerId={maker}
+          {...(typeof adding === 'number'
+            ? { manufacturerId: adding }
+            : partMaker
+              ? { manufacturerId: partMaker.id }
+              : { manufacturer: adding })}
           onCreated={(m) => {
-            setAdding(false);
+            setAdding(null);
             onChange([...value, m.id]);
           }}
-          onCancel={() => setAdding(false)}
+          onCancel={() => setAdding(null)}
         />
       )}
-      {!maker && !chosen.length && (
+      {!maker && !chosen.length && !offerPartMaker && (
         <p className="text-xs text-muted">
-          Hersteller wählen, dann die passenden Modelle antippen.
+          Oben den Hersteller wählen, dann die passenden Modelle antippen.
         </p>
       )}
+      <div className="flex items-center gap-2 text-xs text-muted">
+        <span className="shrink-0">
+          {maker ? 'Modelle eines anderen Herstellers:' : 'Oder Modelle von:'}
+        </span>
+        <span className="min-w-0 flex-1">
+          <MakerSelect
+            models={models}
+            label="Hersteller für passende Modelle"
+            value={maker}
+            onChange={(id) => {
+              setPicked({ id, for: name });
+              setAdding(id && !models.some((m) => m.manufacturerId === id) ? id : null);
+            }}
+          />
+        </span>
+      </div>
     </div>
   );
 }

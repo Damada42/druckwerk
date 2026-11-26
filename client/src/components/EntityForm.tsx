@@ -148,6 +148,7 @@ export function EntityForm<R extends ResourceName>({
             <Field
               key={f.key}
               label={label}
+              group={f.type === 'printerModels'}
               className={f.wide || f.type === 'textarea' ? 'sm:col-span-2' : undefined}
             >
               {f.type === 'textarea' ? (
@@ -184,7 +185,11 @@ export function EntityForm<R extends ResourceName>({
                   }
                 />
               ) : f.type === 'printerModels' ? (
-                <PrinterModelsSelect value={(value as number[]) ?? []} onChange={set} />
+                <PrinterModelsSelect
+                  value={(value as number[]) ?? []}
+                  onChange={set}
+                  makerName={(values.manufacturer as string | null | undefined) ?? ''}
+                />
               ) : f.type === 'color' ? (
                 <div className="flex gap-2">
                   <input

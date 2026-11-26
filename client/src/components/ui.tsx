@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 
 export const euro = (n: number | null | undefined) =>
   n === null || n === undefined
@@ -47,13 +47,30 @@ export function Field({
   children,
   className,
   badge,
+  group,
 }: {
   label: string;
   children: ReactNode;
   className?: string;
   /** Kleiner Hinweis neben dem Label, z.B. „erkannt“ */
   badge?: ReactNode;
+  /**
+   * Mehrere Bedienelemente (z.B. Chips): als Gruppe statt als <label>, sonst schaltet ein Klick
+   * auf den Bereich das erste Element um, und alle Knöpfe hießen wie das Feld
+   */
+  group?: boolean;
 }) {
+  const id = useId();
+  if (group)
+    return (
+      <div role="group" aria-labelledby={id} className={cx('flex flex-col gap-1.5', className)}>
+        <span id={id} className="flex items-center gap-1.5 text-xs font-medium text-muted">
+          {label}
+          {badge}
+        </span>
+        {children}
+      </div>
+    );
   return (
     <label className={cx('flex flex-col gap-1.5', className)}>
       <span className="flex items-center gap-1.5 text-xs font-medium text-muted">

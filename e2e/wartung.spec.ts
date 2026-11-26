@@ -186,12 +186,14 @@ test('Druckermodelle: in den Einstellungen anlegen, Ersatzteil für mehrere Mode
   await page.getByRole('button', { name: 'Ersatzteil', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Name *').fill('PTFE-Schlauch 1 m');
-  const maker = dialog.getByLabel('Hersteller für passende Modelle');
-  await maker.selectOption({ label: 'Bambu Lab' });
-  // Nur Modelle von Bambu Lab
+  // Der Hersteller des Teils zeigt gleich dessen Modelle – nur die von Bambu Lab
+  await dialog
+    .getByRole('combobox', { name: 'Hersteller', exact: true })
+    .selectOption({ label: 'Bambu Lab' });
   await expect(dialog.getByRole('button', { name: 'MK4S' })).toHaveCount(0);
   await dialog.getByRole('button', { name: 'P1S', exact: true }).click();
-  await maker.selectOption({ label: 'Artillery' });
+  // Passt auch für einen Drucker eines anderen Herstellers
+  await dialog.getByLabel('Hersteller für passende Modelle').selectOption({ label: 'Artillery' });
   await dialog.getByRole('button', { name: 'Sidewinder X1', exact: true }).click();
   await expect(dialog.getByRole('button', { name: 'Bambu Lab P1S entfernen' })).toBeVisible();
   await expect(
@@ -208,4 +210,35 @@ test('Druckermodelle: in den Einstellungen anlegen, Ersatzteil für mehrere Mode
     .selectOption({ label: 'Artillery Sidewinder X1' });
   await expect(page.getByRole('region', { name: 'PTFE-Schlauch 1 m' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Hotend 0,4 mm' })).toHaveCount(0);
+});
+
+test('Ersatzteil: neuer Hersteller und neues Modell direkt im Formular', async ({ page }) => {
+  await page.goto('/ersatzteile');
+  await page.getByRole('button', { name: 'Ersatzteil', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Name *').fill('Bauplatte 350');
+  await dialog
+    .getByRole('combobox', { name: 'Hersteller', exact: true })
+    .selectOption({ label: '＋ Neuer Hersteller …' });
+  await dialog.getByPlaceholder('Name des Herstellers').fill('Voron Design');
+  await dialog.getByRole('button', { name: '＋ Modell von Voron Design anlegen' }).click();
+  await dialog.getByLabel('Name des neuen Modells').fill('Voron 2.4');
+  await dialog.getByRole('button', { name: 'Anlegen' }).click();
+  await expect(
+    dialog.getByRole('button', { name: 'Voron Design Voron 2.4 entfernen' }),
+  ).toBeVisible();
+  // Danach gleich in den Listen: Modell als Chip, Hersteller in der Auswahl
+  await expect(dialog.getByRole('button', { name: 'Voron 2.4', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(
+    page.getByRole('region', { name: 'Bauplatte 350' }).getByText('Voron Design Voron 2.4'),
+  ).toBeVisible();
+  await page.goto('/einstellungen');
+  const card = page.getByRole('heading', { name: 'Druckermodelle' }).locator('..');
+  await card.getByRole('button', { name: /^Voron Design/ }).click();
+  await expect(card.getByText('Voron 2.4')).toBeVisible();
 });
