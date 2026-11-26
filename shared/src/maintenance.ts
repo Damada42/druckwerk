@@ -15,6 +15,8 @@ export interface SparePart {
   /** Ab weniger Stück gilt das Teil als knapp; 0 = keine Warnung */
   minStock: number;
   storageLocationId: number | null;
+  /** Kategorie (Einstellungen → Ersatzteil-Kategorien); null = ohne */
+  categoryId: number | null;
   /** Druckermodelle, für die das Teil passt */
   modelIds: number[];
   notes: string | null;

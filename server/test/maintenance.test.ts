@@ -11,7 +11,9 @@ import {
   type NotifyService,
   type Printer,
   type PrinterModel,
+  type PartCategory,
   type SparePart,
+  guessPartCategory,
   modelLabel,
 } from '@3dapp/shared';
 import Database from 'better-sqlite3';
@@ -543,5 +545,139 @@ describe('Druckermodelle', () => {
       model: 'Artillery Sidewinder X2',
     });
     expect((await json<SparePart>('GET', url)).body.modelIds).toEqual([p1s.id]);
+  });
+});
+
+describe('Ersatzteil-Kategorien', () => {
+  const NAMES: [string, string][] = [
+    ['Düsenwischer', 'consumables'],
+    ['Nozzle Wiper', 'consumables'],
+    ['Düse 0,4 mm gehärtet', 'nozzle'],
+    ['Hotend 0,4 mm', 'hotend'],
+    ['Hotend-Silikonsocke', 'hotend'],
+    ['Thermistor Heizbett', 'bed'],
+    ['Filamentschneider-Klinge', 'extruder'],
+    ['Filament Cutter', 'extruder'],
+    ['PTFE-Schlauch', 'feed'],
+    ['AMS Zahnrad-Einheit', 'ams'],
+    ['Klammer', 'other'],
+    ['Bauteillüfter', 'cooling'],
+    ['GT2-Riemen', 'drive'],
+    ['Linearwelle 8 mm', 'axes'],
+    ['Mainboard', 'control'],
+    ['Netzteil 350 W', 'electronics'],
+    ['Aktivkohlefilter P1S', 'enclosure'],
+  ];
+
+  it('ordnet Namen einer Kategorie zu', () => {
+    for (const [name, key] of NAMES) expect([name, guessPartCategory(name)]).toEqual([name, key]);
+  });
+
+  it('Migration ordnet bestehende Teile wie guessPartCategory zu', () => {
+    const src = fileURLToPath(new URL('../drizzle', import.meta.url));
+    const dir = mkdtempSync(path.join(tmpdir(), '3dapp-kat-'));
+    const old = path.join(dir, 'drizzle');
+    cpSync(src, old, { recursive: true });
+    const journalFile = path.join(old, 'meta', '_journal.json');
+    const journal = JSON.parse(readFileSync(journalFile, 'utf8')) as { entries: { tag: string }[] };
+    journal.entries = journal.entries.filter((e) => e.tag < '0020');
+    writeFileSync(journalFile, JSON.stringify(journal));
+    const sqlite = new Database(':memory:');
+    const db = drizzle(sqlite);
+    migrate(db, { migrationsFolder: old });
+    const insert = sqlite.prepare('INSERT INTO spare_parts (name) VALUES (?)');
+    for (const [name] of NAMES) insert.run(name);
+    migrate(db, { migrationsFolder: src });
+    const rows = sqlite
+      .prepare(
+        `SELECT sp.name, pc.key FROM spare_parts sp JOIN part_categories pc ON pc.id = sp.category_id ORDER BY sp.id`,
+      )
+      .all() as { name: string; key: string }[];
+    expect(rows.map((r) => [r.name, r.key])).toEqual(NAMES);
+    sqlite.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  describe('über die API', () => {
+    let built: Awaited<ReturnType<typeof buildApp>>;
+    async function json<T>(
+      method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+      url: string,
+      payload?: object,
+    ) {
+      const res = await built.app.inject({ method, url, payload });
+      return { status: res.statusCode, body: (res.body ? res.json() : undefined) as T };
+    }
+    const list = async () => (await json<PartCategory[]>('GET', '/api/part-categories')).body;
+    beforeEach(async () => {
+      built = await buildApp({ dbFile: ':memory:', uploadDir: tmpdir() });
+    });
+    afterEach(() => built.app.close());
+
+    it('mitgelieferte Liste, eigene anlegen, sortieren, umbenennen, löschen', async () => {
+      const seeded = await list();
+      expect(seeded.map((c) => c.name)).toEqual([
+        'Hotend',
+        'Düsen',
+        'Extruder',
+        'Filamentführung',
+        'AMS / MMU',
+        'Druckbett',
+        'Achsen & Führungen',
+        'Antrieb & Motoren',
+        'Kühlung',
+        'Elektronik',
+        'Steuerung',
+        'Gehäuse',
+        'Wartung & Verbrauchsmaterial',
+        'Sonstiges',
+      ]);
+      const own = await json<PartCategory>('POST', '/api/part-categories', { name: 'Werkzeug' });
+      expect(own.status).toBe(201);
+      expect(own.body.key).toMatch(/^c-/);
+      expect((await json('POST', '/api/part-categories', { name: 'hotend' })).status).toBe(409);
+      expect((await list()).at(-1)!.name).toBe('Werkzeug');
+
+      // Eigene an den Anfang
+      const ids = (await list()).map((c) => c.id);
+      await json('PUT', '/api/part-categories/order', { ids: [own.body.id, ...ids.slice(0, -1)] });
+      expect((await list())[0].name).toBe('Werkzeug');
+
+      // Teil ohne Angabe: Kategorie aus dem Namen; mit Angabe die gewählte
+      const hotend = seeded.find((c) => c.key === 'hotend')!;
+      const auto = await json<SparePart>('POST', '/api/spare-parts', { name: 'Hotend 0,6 mm' });
+      expect(auto.body.categoryId).toBe(hotend.id);
+      const chosen = await json<SparePart>('POST', '/api/spare-parts', {
+        name: 'Seitenschneider',
+        categoryId: own.body.id,
+      });
+      expect(chosen.body.categoryId).toBe(own.body.id);
+      expect((await json('POST', '/api/spare-parts', { name: 'X', categoryId: 9999 })).status).toBe(
+        400,
+      );
+
+      // Umbenennen behält die Zuordnung (fester Schlüssel), Löschen macht „ohne Kategorie“
+      await json('PUT', `/api/part-categories/${hotend.id}`, { name: 'Hotends' });
+      expect((await list()).find((c) => c.key === 'hotend')!.name).toBe('Hotends');
+      expect((await json('DELETE', `/api/part-categories/${own.body.id}`)).status).toBe(204);
+      expect(
+        (await json<SparePart>('GET', `/api/spare-parts/${chosen.body.id}`)).body.categoryId,
+      ).toBeNull();
+    });
+
+    it('Vorlage legt Teile mit Kategorie an', async () => {
+      const items = P1_TEMPLATE.filter((t) => t.part).slice(0, 3);
+      expect(
+        (
+          await json('POST', '/api/printers/1/maintenance-tasks', {
+            items: items.map((t) => ({ ...t, intervalMonths: t.intervalMonths ?? 1 })),
+          })
+        ).status,
+      ).toBe(201);
+      const cats = await list();
+      const parts = (await json<SparePart[]>('GET', '/api/spare-parts')).body;
+      for (const p of parts)
+        expect(cats.find((c) => c.id === p.categoryId)?.key).toBe(guessPartCategory(p.name));
+    });
   });
 });

@@ -1,4 +1,5 @@
 import {
+  MMU_SOURCE_LABELS,
   KLIPPER_SPEED_PERCENTS,
   PRINT_SPEEDS,
   PRINT_SPEED_LABELS,
@@ -595,8 +596,14 @@ function AmsSlots({
 
   return (
     <div>
-      <h3 className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">
+      <h3 className="mb-2 flex items-baseline gap-2 text-xs font-semibold tracking-wide text-muted uppercase">
         {mmu ? 'MMU' : klipper ? 'Filament' : 'AMS'}
+        {/* Woher die Anzahl der Gates kommt – hilft, wenn sie nicht stimmt */}
+        {mmu && (
+          <span className="font-normal tracking-normal normal-case" data-testid="mmu-source">
+            {mmu.gates} Gates · {MMU_SOURCE_LABELS[mmu.source]}
+          </span>
+        )}
       </h3>
       <ul className="grid gap-2">
         {slots.map((slot) => {

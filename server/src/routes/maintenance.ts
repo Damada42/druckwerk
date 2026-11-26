@@ -14,6 +14,7 @@ import { schema, type Db } from '../db/index.js';
 import type { HaClient } from '../ha/client.js';
 import { readTargets, sendToAll } from '../ha/maintenance.js';
 import { canonicalManufacturer } from './manufacturers.js';
+import { categoryForName, checkCategoryId } from './partCategories.js';
 import { parseId, pickColumns } from './crud.js';
 import { readSettings } from './storage.js';
 
@@ -48,6 +49,7 @@ function preparePart(db: Db, data: Record<string, unknown>) {
   ] as const)
     if (key in result) result[key] = optionalNumber(result[key], label, { integer: true }) ?? 0;
   if ('price' in result) result.price = optionalNumber(result.price, 'Der Preis');
+  if ('categoryId' in result) result.categoryId = checkCategoryId(db, result.categoryId);
   if (typeof result.shopUrl === 'string') {
     const url = result.shopUrl.trim();
     if (url && !/^https?:\/\//i.test(url))
@@ -156,6 +158,9 @@ export function registerMaintenanceRoutes(app: FastifyInstance, db: Db, ha: HaCl
   app.post<{ Body: Record<string, unknown> }>('/spare-parts', (req, reply) => {
     const data = preparePart(db, pickColumns(spareParts, req.body));
     if (!data.name) return reply.code(400).send({ error: 'Bitte einen Namen eintragen.' });
+    // Ohne Angabe: Kategorie aus dem Namen
+    if (!('categoryId' in (req.body ?? {})))
+      data.categoryId = categoryForName(db, String(data.name));
     const id = db.transaction((tx) => {
       const row = tx
         .insert(spareParts)
@@ -327,6 +332,7 @@ export function registerMaintenanceRoutes(app: FastifyInstance, db: Db, ha: HaCl
                     name: item.part.name,
                     manufacturer: manufacturer || null,
                     shopUrl: item.part.shopUrl,
+                    categoryId: categoryForName(tx as unknown as Db, item.part.name),
                   })
                   .returning()
                   .get().id;

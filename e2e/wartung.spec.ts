@@ -242,3 +242,59 @@ test('Ersatzteil: neuer Hersteller und neues Modell direkt im Formular', async (
   await card.getByRole('button', { name: /^Voron Design/ }).click();
   await expect(card.getByText('Voron 2.4')).toBeVisible();
 });
+
+test('Ersatzteile: Kategorien, Suche, nach Hersteller sortieren, zuklappen', async ({ page }) => {
+  await page.goto('/ersatzteile');
+  // Kategorie kam aus dem Namen
+  const section = (name: string) => page.getByRole('region', { name, exact: true });
+  await expect(section('Filamentführung').getByText('PTFE-Schlauch 1 m')).toBeVisible();
+  await expect(section('Hotend').getByText('Hotend 0,4 mm')).toBeVisible();
+  await expect(section('Druckbett').getByText('Bauplatte 350')).toBeVisible();
+
+  // Zuklappen bleibt beim Neuladen
+  await section('Hotend').locator('button[aria-expanded]').click();
+  await expect(page.getByText('Hotend 0,4 mm')).toBeHidden();
+  await page.reload();
+  await expect(section('Hotend').locator('button[aria-expanded]')).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
+
+  // Suche nach Namen zeigt Treffer auch in zugeklappten Abschnitten
+  await page.getByLabel('Ersatzteile suchen').fill('hotend');
+  await expect(page.getByText('Hotend 0,4 mm')).toBeVisible();
+  await expect(section('Filamentführung')).toHaveCount(0);
+  await page.getByLabel('Ersatzteile suchen').fill('gibtsnicht');
+  await expect(page.getByText('Kein Ersatzteil mit „gibtsnicht“ im Namen.')).toBeVisible();
+  await page.getByLabel('Ersatzteile suchen').fill('');
+
+  // Nach Hersteller
+  await page.getByLabel('Sortieren nach').selectOption({ label: 'Nach Hersteller' });
+  await expect(section('Bambu Lab').getByText('Hotend 0,4 mm')).toBeVisible();
+  await expect(section('Voron Design').getByText('Bauplatte 350')).toBeVisible();
+  await page.getByLabel('Sortieren nach').selectOption({ label: 'Nach Kategorie' });
+
+  // Eigene Kategorie in den Einstellungen, dann beim Teil wählen
+  await page.goto('/einstellungen');
+  const cats = page.getByRole('region', { name: 'Ersatzteil-Kategorien' });
+  await cats.getByLabel('Neue Kategorie').fill('Werkzeug');
+  await cats.getByRole('button', { name: 'Hinzufügen' }).click();
+  await expect(cats.getByText('Werkzeug')).toBeVisible();
+  await cats.getByRole('button', { name: 'Werkzeug nach oben' }).click();
+  await expect(cats.getByRole('listitem').nth(-2)).toContainText('Werkzeug');
+
+  await page.goto('/ersatzteile');
+  await page.getByRole('button', { name: 'Ersatzteil', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Name *').fill('Düse 0,6 mm');
+  // Vorschlag aus dem Namen, selbst gewählt bleibt
+  await expect(dialog.getByRole('combobox', { name: 'Kategorie' })).toHaveValue(/\d+/);
+  await expect(
+    dialog.getByRole('combobox', { name: 'Kategorie' }).locator('option:checked'),
+  ).toHaveText('Düsen');
+  await dialog.getByRole('combobox', { name: 'Kategorie' }).selectOption({ label: 'Werkzeug' });
+  await dialog.getByLabel('Name *').fill('Düsenschlüssel');
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(section('Werkzeug').getByText('Düsenschlüssel')).toBeVisible();
+});

@@ -40,15 +40,25 @@ export interface HaPrinterDevice {
 
 /** Klipper-MMU: Einstellungen am Drucker (siehe Printer.slotCount / mmuEntity) */
 export interface MmuOptions {
+  /** false: ohne MMU (z.B. umgebaut) – ein einziger Platz, egal was die Sensoren melden */
+  hasAms?: boolean;
   slotCount?: number | null;
   mmuEntity?: string | null;
 }
+
+export type MmuSource = 'manual' | 'entity' | 'sensors';
+
+export const MMU_SOURCE_LABELS: Record<MmuSource, string> = {
+  manual: 'Anzahl von Hand',
+  entity: 'aus der Zusatz-Entity',
+  sensors: 'aus den Filamentsensoren',
+};
 
 /** Klipper-MMU: woher die Gates kommen und was über sie bekannt ist */
 export interface MmuInfo {
   gates: number;
   /** Anzahl von Hand, aus der Zusatz-Entity oder aus den Gate-Sensoren von Moonraker */
-  source: 'manual' | 'entity' | 'sensors';
+  source: MmuSource;
   /** Eingetragene Zusatz-Entity: gefunden (true), fehlt (false), keine eingetragen (null) */
   entityFound: boolean | null;
   /** Welches Gate gerade druckt, ist bekannt (nur mit Zusatz-Entity) */
@@ -576,7 +586,10 @@ function parseKlipperLive(
           e.connectionId === connectionId,
       )
     : undefined;
-  const { gates, source, sensors } = klipperGates(mine, extra, options);
+  const { gates, source, sensors } =
+    options.hasAms === false
+      ? { gates: 1, source: 'manual' as const, sensors: new Map<number, boolean>() }
+      : klipperGates(mine, extra, options);
   const x = extra?.attributes ?? {};
   // Happy Hare: aktuelles Gate (-1 unbekannt, -2 Bypass)
   const activeGate = typeof x.gate === 'number' && x.gate >= 0 ? x.gate : null;

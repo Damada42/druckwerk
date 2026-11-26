@@ -15,6 +15,7 @@ import {
   type NotifyService,
   type PrinterCamera,
   type SparePart,
+  type PartCategory,
   type PrinterCameraInput,
   type PrinterAction,
   type PrinterLiveResponse,
@@ -125,6 +126,7 @@ export interface Resources {
   manufacturers: Manufacturer;
   'printer-models': PrinterModel;
   'spare-parts': SparePart;
+  'part-categories': PartCategory;
   'maintenance-tasks': MaintenanceTask;
 }
 
@@ -164,6 +166,8 @@ export function useSave<R extends ResourceName>(name: R) {
       qc.invalidateQueries({ queryKey: ['manufacturers'] });
     // Gelöschte Teile nehmen die Zuordnung der Wartungspunkte mit
     if (name === 'spare-parts') qc.invalidateQueries({ queryKey: ['maintenance-tasks'] });
+    // Gelöschte Kategorien nehmen die Zuordnung der Teile mit
+    if (name === 'part-categories') qc.invalidateQueries({ queryKey: ['spare-parts'] });
   };
   const save = useMutation({
     mutationFn: ({ id, ...data }: Partial<Input<Resources[R]>> & { id?: number }) =>
@@ -271,6 +275,15 @@ export function useStorageOrder() {
   return useMutation({
     mutationFn: (ids: number[]) => api.put<void>('/storage-locations/order', { ids }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['storage-locations'] }),
+  });
+}
+
+/** Reihenfolge der Ersatzteil-Kategorien (auch die der Abschnitte auf der Ersatzteil-Seite) */
+export function usePartCategoryOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: number[]) => api.put<PartCategory[]>('/part-categories/order', { ids }),
+    onSuccess: (list) => qc.setQueryData(['part-categories'], list),
   });
 }
 

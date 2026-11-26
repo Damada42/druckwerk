@@ -1,5 +1,18 @@
 # Änderungen
 
+## 0.12.0
+
+- Ersatzteile haben jetzt **Kategorien** (Hotend, Düsen, Extruder, Filamentführung, AMS / MMU,
+  Druckbett, Achsen & Führungen, Antrieb & Motoren, Kühlung, Elektronik, Steuerung, Gehäuse,
+  Wartung & Verbrauchsmaterial, Sonstiges). Unter Einstellungen → Ersatzteile & Wartung lassen sie
+  sich umbenennen, sortieren, löschen und eigene anlegen. Bestehende Teile werden nach dem Namen
+  zugeordnet, neue bekommen die Kategorie vorgeschlagen.
+- Ersatzteil-Seite: **Suche** nach dem Namen, Sortierung nach Kategorie oder Hersteller, Abschnitte
+  lassen sich **zusammenklappen**.
+- Backup: eigener Bereich **Ersatzteile** (bisher bei „Drucker“; ältere Backups enthalten sie weiter).
+- Klipper mit MMU: Ohne Haken bei „Mit AMS bzw. MMU“ gibt es wieder nur den einen Platz „Spule“.
+  Die Anzahl Slots geht nur noch von 1 bis 24, und die MMU-Anzeige zeigt, woher die Anzahl kommt.
+
 ## 0.11.1
 
 - Neues Ersatzteil: Der Hersteller des Teils zeigt gleich dessen Druckermodelle zum Antippen –

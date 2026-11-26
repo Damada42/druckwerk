@@ -30,6 +30,9 @@ export interface FieldDef {
   wide?: boolean;
   placeholder?: string;
   step?: string;
+  /** Grenzen für Zahlenfelder; außerhalb lässt sich nicht speichern */
+  min?: number;
+  max?: number;
   /**
    * Nach einer Änderung weitere Felder setzen (z.B. Name und Modell aus dem gewählten Gerät):
    * bekommt den neuen Wert und die bisherigen Werte, zurück kommen die Felder zum Überschreiben.
@@ -40,6 +43,15 @@ export interface FieldDef {
 }
 
 type Values = Record<string, unknown>;
+
+/** Zahl außerhalb von min/max (leer zählt nicht) */
+function outOfRange(f: FieldDef, value: unknown) {
+  if (f.type !== 'number' || value === '' || value === null || value === undefined) return false;
+  const n = Number(String(value).replace(',', '.'));
+  return (
+    !Number.isFinite(n) || (f.min !== undefined && n < f.min) || (f.max !== undefined && n > f.max)
+  );
+}
 
 /** Generischer Anlegen/Bearbeiten-Dialog für einfache Datensätze. */
 export function EntityForm<R extends ResourceName>({
@@ -73,7 +85,9 @@ export function EntityForm<R extends ResourceName>({
   const pending = save.isPending || custom.isPending;
   const missing = fields.some(
     (f) =>
-      f.required && (values[f.key] === undefined || values[f.key] === null || values[f.key] === ''),
+      (f.required &&
+        (values[f.key] === undefined || values[f.key] === null || values[f.key] === '')) ||
+      ((!f.show || f.show(values)) && outOfRange(f, values[f.key])),
   );
 
   const submit = () => {
@@ -209,6 +223,9 @@ export function EntityForm<R extends ResourceName>({
                   autoFocus={i === 0}
                   type={f.type ?? 'text'}
                   step={f.step}
+                  min={f.min}
+                  max={f.max}
+                  aria-invalid={outOfRange(f, value) || undefined}
                   inputMode={f.type === 'number' ? 'decimal' : undefined}
                   value={(value as string | number) ?? ''}
                   placeholder={f.placeholder}

@@ -342,6 +342,26 @@ describe('Backup', () => {
     expect(after.members).toEqual([]);
   });
 
+  it('sichert Ersatzteile als eigenen Bereich; ältere Backups mit „Drucker“ enthalten sie noch', async () => {
+    await send('POST', '/api/spare-parts', { name: 'Düse 0,4', stockQty: 2 });
+    const res = await app.inject('/api/backup?groups=parts');
+    const entries = unzipSync(new Uint8Array(res.rawPayload));
+    expect(JSON.parse(strFromU8(entries['druckwerk-backup.json'])).groups).toEqual(['parts']);
+    const inspect = async (zip: Uint8Array) =>
+      (
+        await app.inject({ method: 'POST', url: '/api/backup/inspect', ...multipart('b.zip', zip) })
+      ).json<BackupInfo>();
+    expect((await inspect(zipSync(entries))).groups).toEqual([{ group: 'parts', count: 1 }]);
+
+    // Backup bis 0.11.1: nur „Drucker“ gewählt, ohne format
+    const old = unzipSync(new Uint8Array((await app.inject('/api/backup')).rawPayload));
+    const meta = JSON.parse(strFromU8(old['druckwerk-backup.json']));
+    old['druckwerk-backup.json'] = strToU8(
+      JSON.stringify({ ...meta, groups: ['printers'], format: undefined }),
+    );
+    expect((await inspect(zipSync(old))).groups.map((g) => g.group)).toEqual(['printers', 'parts']);
+  });
+
   it('ordnet jede Tabelle einem Bereich zu', () => {
     const tables = (
       db.$client

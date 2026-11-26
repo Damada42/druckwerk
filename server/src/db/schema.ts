@@ -171,8 +171,19 @@ export const spareParts = sqliteTable('spare_parts', {
   storageLocationId: integer('storage_location_id').references(() => storageLocations.id, {
     onDelete: 'set null',
   }),
+  categoryId: integer('category_id').references(() => partCategories.id, {
+    onDelete: 'set null',
+  }),
   notes: text('notes'),
   createdAt: createdAt(),
+});
+
+/** Kategorien der Ersatzteile; mitgelieferte mit festem Schlüssel (siehe PART_CATEGORY_SEED) */
+export const partCategories = sqliteTable('part_categories', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  key: text('key').notNull().unique(),
+  name: text('name').notNull(),
+  position: real('position').notNull().default(0),
 });
 
 /** Für welche Druckermodelle ein Ersatzteil passt */

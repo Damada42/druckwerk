@@ -254,7 +254,7 @@ Hersteller lässt sich direkt im Formular über „Neuer Hersteller …“ eintr
 
 **Backup:** Unter „Einstellungen → Backup“ lädt „Backup herunterladen“ eine ZIP-Datei mit den Daten
 samt Belegen, PDFs und Logo. Per Häkchen lässt sich alles oder nur ein Teil sichern: Projekte, Kunden,
-Team, Filament, Lager, Drucker, Firmendaten und Einstellungen. Beim Einspielen zeigt Druckwerk zuerst,
+Team, Filament, Lager, Drucker, Ersatzteile, Firmendaten und Einstellungen. Beim Einspielen zeigt Druckwerk zuerst,
 was in der Datei steckt (z.B. „12 Projekte“, „40 Spulen“); ersetzt werden nur die angehakten Bereiche
 (auch aus älteren Versionen). Verweist danach etwas auf einen Eintrag, den es nicht mehr gibt (ein
 Projekt auf einen Kunden, wenn nur die Kunden eingespielt wurden), wird der Verweis entfernt. Der
@@ -303,10 +303,17 @@ wenn genau einem Gate eine Spule zugeordnet ist.
 **Ersatzteile & Wartung:** Unter „Einstellungen → Ersatzteile & Wartung“ einschaltbar.
 
 - **Ersatzteile** (eigene Seite, am Handy unter „Mehr“): Name, Hersteller aus der Herstellerliste,
-  Artikelnummer, Shop-Link, Preis, Lagerbestand mit +/− und Mindestbestand. Ein Teil kann zu mehreren
-  Druckermodellen passen (Hersteller wählen, dann die Modelle antippen); die Seite lässt sich nach
-  Modell filtern. Mit eingeschalteten Lagerplätzen hat jedes Teil seinen Platz und erscheint auch auf
-  der Lager-Seite.
+  Kategorie, Artikelnummer, Shop-Link, Preis, Lagerbestand mit +/− und Mindestbestand. Ein Teil kann
+  zu mehreren Druckermodellen passen: Der Hersteller des Teils zeigt gleich dessen Modelle zum
+  Antippen, darunter lassen sich Modelle anderer Hersteller dazuwählen. Die Seite ist nach Kategorie
+  (Standard) oder Hersteller in zusammenklappbare Abschnitte gegliedert, mit Suche nach dem Namen und
+  Filter nach Modell. Mit eingeschalteten Lagerplätzen hat jedes Teil seinen Platz und erscheint auch
+  auf der Lager-Seite.
+- **Ersatzteil-Kategorien** (Einstellungen → Ersatzteile & Wartung): vorbefüllt mit Hotend, Düsen,
+  Extruder, Filamentführung, AMS / MMU, Druckbett, Achsen & Führungen, Antrieb & Motoren, Kühlung,
+  Elektronik, Steuerung, Gehäuse, Wartung & Verbrauchsmaterial und Sonstiges; umbenennen, sortieren,
+  löschen und eigene anlegen. Neue Teile bekommen die Kategorie aus dem Namen vorgeschlagen
+  („Düsenwischer“ → Wartung & Verbrauchsmaterial).
 - **Druckermodelle** (Einstellungen): eine Liste je Hersteller, vorbefüllt mit gängigen Modellen
   (Bambu Lab, Prusa, Anycubic, Creality, Elegoo, QIDI, Flashforge …) und beliebig erweiterbar. Im
   Druckerformular wählst du erst den Hersteller, dann nur noch dessen Modelle; beim Verknüpfen mit

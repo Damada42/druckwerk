@@ -1,4 +1,5 @@
 import {
+  MAX_GATES,
   calcPrinterHourly,
   printerFromDevice,
   type HaMmuEntity,
@@ -55,6 +56,9 @@ function mmuFields(
       label: 'Anzahl Slots (MMU)',
       type: 'number',
       placeholder: 'automatisch',
+      min: 1,
+      max: MAX_GATES,
+      step: '1',
       show,
     },
     candidates.length

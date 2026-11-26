@@ -119,6 +119,13 @@ describe('Klipper-MMU im Live-Status', () => {
     });
     expect(single.ams).toEqual([expect.objectContaining({ entityId: USED, label: 'Spule' })]);
     expect(single.mmu).toBeNull();
+    // Ohne AMS/MMU-Haken (umgebaut): ein Platz, auch wenn Sensoren und Anzahl Gates melden
+    const off = parsePrinterLive(toEntities([...A20, ...gateSensors(['on', 'on'])]), DEVICE, {
+      hasAms: false,
+      slotCount: 4,
+    });
+    expect(off.ams).toEqual([expect.objectContaining({ entityId: USED, label: 'Spule' })]);
+    expect(off.mmu).toBeNull();
   });
 
   it('liest Material, Farbe, Name und das aktive Gate aus der Zusatz-Entity (Happy Hare)', () => {

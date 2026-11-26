@@ -23,6 +23,7 @@ import { registerDocumentRoutes } from './routes/documents.js';
 import { registerCostCategoryRoutes } from './routes/costCategories.js';
 import { registerBackupRoutes } from './routes/backup.js';
 import { registerMaintenanceRoutes } from './routes/maintenance.js';
+import { registerPartCategoryRoutes } from './routes/partCategories.js';
 import { applyPrinterModel, registerPrinterModelRoutes } from './routes/printerModels.js';
 import {
   canonicalManufacturer,
@@ -291,6 +292,7 @@ export async function buildApp(options: AppOptions) {
       registerDocumentRoutes(api, db, options.uploadDir);
       registerCostCategoryRoutes(api, db);
       registerMaintenanceRoutes(api, db, ha);
+      registerPartCategoryRoutes(api, db);
       registerBackupRoutes(api, db, {
         uploadDir: options.uploadDir,
         // Sicherheitskopie vor einem Import neben der Datenbank (data/backup)

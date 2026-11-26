@@ -164,4 +164,25 @@ test('Klipper mit MMU: Zusatz-Entity wählen, Gates mit Material, Spule überneh
     colorHex: '#ff0000',
     notes: expect.stringMatching(/^Aus MMU Gate 2/),
   });
+
+  await expect(card.getByTestId('mmu-source')).toHaveText('4 Gates · aus der Zusatz-Entity');
+
+  // Anzahl Slots von Hand: nur noch zwei Gates; unter 1 lässt sich nicht speichern
+  await page.getByRole('button', { name: 'A20 Werkstatt bearbeiten' }).click();
+  await dialog.getByLabel('Anzahl Slots (MMU)').fill('-2');
+  await expect(dialog.getByRole('button', { name: 'Speichern' })).toBeDisabled();
+  await dialog.getByLabel('Anzahl Slots (MMU)').fill('2');
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(card.getByText('Gate 1', { exact: true })).toBeVisible();
+  await expect(card.getByText('Gate 2', { exact: true })).toHaveCount(0);
+  await expect(card.getByTestId('mmu-source')).toHaveText('2 Gates · Anzahl von Hand');
+
+  // Umgebaut auf eine Spule: ohne Haken nur noch der eine Platz
+  await page.getByRole('button', { name: 'A20 Werkstatt bearbeiten' }).click();
+  await dialog.getByRole('checkbox', { name: 'Mit AMS bzw. MMU (mehrere Filamente)' }).uncheck();
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(card.getByText('Gate 0', { exact: true })).toHaveCount(0);
+  await expect(card.getByText('Spule', { exact: true })).toBeVisible();
 });

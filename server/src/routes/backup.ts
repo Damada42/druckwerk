@@ -18,6 +18,8 @@ import { SUPERVISOR_URL } from '../ha/client.js';
 
 const DB_NAME = '3dapp.db';
 const ZIP_NAME = 'backup.zip';
+/** 2: Ersatzteile als eigener Bereich (vorher Teil von „Drucker“) */
+const BACKUP_FORMAT = 2;
 const fail = (message: string) => Object.assign(new Error(message), { statusCode: 400 });
 
 /** Ein Teil einer Tabelle, der zu einer Gruppe gehört (where: Bedingung für die Zeilen) */
@@ -55,11 +57,10 @@ export const GROUP_TABLES: Record<BackupGroup, TablePart[]> = {
     { table: 'printers' },
     { table: 'printer_cameras' },
     { table: 'ha_connections' },
-    { table: 'spare_parts' },
-    { table: 'spare_part_models' },
     { table: 'maintenance_tasks' },
     { table: 'maintenance_log' },
   ],
+  parts: [{ table: 'spare_parts' }, { table: 'spare_part_models' }, { table: 'part_categories' }],
   company: [{ table: 'settings', where: `"key" = 'company'` }],
   settings: [{ table: 'settings', where: `"key" <> 'company'` }, { table: 'cost_categories' }],
 };
@@ -72,6 +73,7 @@ const GROUP_COUNT: Record<BackupGroup, string> = {
   filament: 'SELECT count(*) FROM {db}.filament_spools',
   storage: 'SELECT count(*) FROM {db}.storage_locations',
   printers: 'SELECT count(*) FROM {db}.printers',
+  parts: 'SELECT count(*) FROM {db}.spare_parts',
   company: `SELECT count(*) FROM {db}.settings WHERE "key" = 'company'`,
   settings: `SELECT (SELECT count(*) FROM {db}.settings WHERE "key" <> 'company')
                   + (SELECT count(*) FROM {db}.cost_categories)`,
@@ -214,7 +216,12 @@ export function registerBackupRoutes(app: FastifyInstance, db: Db, options: Back
       if (!wanted || wanted.has(rel))
         files[`uploads/${rel}`] = new Uint8Array(readFileSync(path.join(options.uploadDir, rel)));
     files['druckwerk-backup.json'] = strToU8(
-      JSON.stringify({ createdAt: new Date().toISOString(), migration: latestMigration(), groups }),
+      JSON.stringify({
+        createdAt: new Date().toISOString(),
+        migration: latestMigration(),
+        groups,
+        format: BACKUP_FORMAT,
+      }),
     );
     const zip = zipSync(files, { level: 0 });
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
@@ -242,7 +249,7 @@ export function registerBackupRoutes(app: FastifyInstance, db: Db, options: Back
       throw fail('Das ist keine ZIP-Datei von Druckwerk.');
     }
     if (!entries[DB_NAME]) throw fail('Im ZIP fehlt die Datenbank – ist das ein Druckwerk-Backup?');
-    let meta: { migration?: number; createdAt?: string; groups?: unknown } = {};
+    let meta: { migration?: number; createdAt?: string; groups?: unknown; format?: number } = {};
     if (entries['druckwerk-backup.json']) {
       try {
         meta = JSON.parse(strFromU8(entries['druckwerk-backup.json'])) as typeof meta;
@@ -252,9 +259,14 @@ export function registerBackupRoutes(app: FastifyInstance, db: Db, options: Back
       if ((meta.migration ?? 0) > latestMigration())
         throw fail('Das Backup stammt aus einer neueren Druckwerk-Version. Bitte erst updaten.');
     }
-    // Backups vor der Auswahl nach Bereichen enthalten alles
-    const groups = Array.isArray(meta.groups)
-      ? BACKUP_GROUPS.filter((g) => (meta.groups as unknown[]).includes(g))
+    // Backups vor der Auswahl nach Bereichen enthalten alles; bis 0.11.1 (ohne format) gehörten
+    // die Ersatzteile zu „Drucker“
+    const listed = Array.isArray(meta.groups) ? (meta.groups as unknown[]) : null;
+    const groups = listed
+      ? BACKUP_GROUPS.filter(
+          (g) =>
+            listed.includes(g) || (g === 'parts' && !meta.format && listed.includes('printers')),
+        )
       : [...BACKUP_GROUPS];
 
     const dir = path.join(tmpdir(), `druckwerk-import-${randomUUID()}`);

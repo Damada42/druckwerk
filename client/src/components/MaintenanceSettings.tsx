@@ -16,6 +16,7 @@ import {
   useSettings,
   useTestNotify,
 } from '../api';
+import { PartCategoriesSettings } from './PartCategoriesCard';
 import { Button, Card, ErrorText, Field, NumberInput, Select, TextArea, TextInput } from './ui';
 
 /** Zahl, die erst beim Verlassen des Felds gespeichert wird */
@@ -303,6 +304,7 @@ export function MaintenanceCard() {
           </div>
 
           <NotifySettings hasHa={hasHa} />
+          <PartCategoriesSettings />
 
           <Link
             to="/ersatzteile"

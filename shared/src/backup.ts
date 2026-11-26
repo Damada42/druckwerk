@@ -7,6 +7,7 @@ export const BACKUP_GROUPS = [
   'filament',
   'storage',
   'printers',
+  'parts',
   'company',
   'settings',
 ] as const;
@@ -19,6 +20,7 @@ export const BACKUP_GROUP_LABELS: Record<BackupGroup, string> = {
   filament: 'Filament',
   storage: 'Lager',
   printers: 'Drucker',
+  parts: 'Ersatzteile',
   company: 'Firmendaten',
   settings: 'Einstellungen',
 };
@@ -31,7 +33,8 @@ export const BACKUP_GROUP_HINTS: Record<BackupGroup, string> = {
   filament:
     'Spulen, Typen, Hersteller und Druckermodelle, Finishes, gemerkte Barcodes, Abbuchungen',
   storage: 'Lagerplätze',
-  printers: 'mit Kameras, Home-Assistant-Verbindungen, Ersatzteilen und Wartung',
+  printers: 'mit Kameras, Home-Assistant-Verbindungen und Wartungsplan',
+  parts: 'mit Lagerbestand, Kategorien und passenden Druckermodellen',
   company: 'Firmenprofil für Angebote und Rechnungen, Logo',
   settings: 'Schalter, Mindestmengen-Gruppierung, Kostenkategorien',
 };
@@ -44,6 +47,7 @@ export const BACKUP_GROUP_UNITS: Partial<Record<BackupGroup, [string, string]>> 
   filament: ['Spule', 'Spulen'],
   storage: ['Lagerplatz', 'Lagerplätze'],
   printers: ['Drucker', 'Drucker'],
+  parts: ['Ersatzteil', 'Ersatzteile'],
 };
 
 /** Inhalt eines hochgeladenen Backups, bevor es eingespielt wird */

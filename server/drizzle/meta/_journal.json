@@ -141,6 +141,13 @@
       "when": 1795709584340,
       "tag": "0019_drop_part_printer_model",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1795729390154,
+      "tag": "0020_part_categories",
+      "breakpoints": true
     }
   ]
 }
