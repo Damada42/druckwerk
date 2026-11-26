@@ -9,8 +9,21 @@ export interface BookingPlan {
   jobKey: string;
   jobName: string | null;
   result: 'finish' | 'failed';
-  shares: { entityId: string; grams: number; meters?: number; estimated: boolean }[];
+  shares: {
+    entityId: string;
+    grams: number;
+    meters?: number;
+    estimated: boolean;
+    /**
+     * Klipper-MMU ohne Wissen, welches Gate gedruckt hat (entityId = UNKNOWN_SLOT): die Gates des
+     * Druckers. Gebucht wird nur, wenn genau einem davon eine Spule zugeordnet ist.
+     */
+    candidates?: string[];
+  }[];
 }
+
+/** Platzhalter-Slot: welches Gate gedruckt hat, ist unbekannt (siehe candidates) */
+export const UNKNOWN_SLOT = '?';
 
 interface Job {
   key: string;
@@ -27,6 +40,8 @@ interface Job {
   weightG: number | null;
   /** Klipper: höchster gemeldeter Filamentverbrauch in Metern (nach dem Druck meldet er 0) */
   meters: number | null;
+  /** Klipper-MMU ohne aktives Gate: die Gates des Druckers (zuletzt gesehen) */
+  gates: string[];
 }
 
 /** Längere Lücken (Server war aus) zählen nur so viel, damit ein Slot nicht überwiegt */
@@ -64,6 +79,7 @@ export class PrintTracker {
           progress: live.progress,
           weightG: live.weightG,
           meters: live.filamentUsedM,
+          gates: [],
         };
         this.jobs.set(printerKey, current);
       } else if (current.provisional && live.startTime) {
@@ -80,6 +96,7 @@ export class PrintTracker {
       current.weightG = live.weightG ?? current.weightG;
       if (live.filamentUsedM !== null)
         current.meters = Math.max(current.meters ?? 0, live.filamentUsedM);
+      if (live.mmu && !live.mmu.activeKnown) current.gates = live.ams.map((s) => s.entityId);
       return null;
     }
 
@@ -91,22 +108,42 @@ export class PrintTracker {
 
     const result = live.state === 'finish' ? 'finish' : 'failed';
 
-    // Klipper: gemessene Länge, auch bei Abbruch genau – kein Anteil nach Fortschritt nötig
+    // Klipper: gemessene Länge, auch bei Abbruch genau – kein Anteil nach Fortschritt nötig.
+    // Mit MMU nach Druckzeit je Gate aufgeteilt; ohne bekanntes Gate entscheidet die Abbuchung.
     if (job.meters !== null) {
-      const [slot] = job.slots.keys();
-      if (!slot || job.meters <= 0) return null;
+      if (job.meters <= 0) return null;
+      const meters = job.meters;
+      const total = [...job.slots.values()].reduce((a, b) => a + b, 0);
+      const entries = [...job.slots.entries()];
+      if (!entries.length) {
+        if (!job.gates.length) return null;
+        return {
+          jobKey: job.key,
+          jobName: job.name,
+          result,
+          shares: [
+            {
+              entityId: UNKNOWN_SLOT,
+              grams: 0,
+              meters: round2(meters),
+              estimated: false,
+              candidates: job.gates,
+            },
+          ],
+        };
+      }
       return {
         jobKey: job.key,
         jobName: job.name,
         result,
-        shares: [
-          {
-            entityId: slot,
+        shares: entries
+          .map(([entityId, seconds]) => ({
+            entityId,
             grams: 0,
-            meters: Math.round(job.meters * 100) / 100,
-            estimated: false,
-          },
-        ],
+            meters: round2(total > 0 ? (meters * seconds) / total : meters / entries.length),
+            estimated: entries.length > 1,
+          }))
+          .filter((s) => s.meters > 0),
       };
     }
 
@@ -153,3 +190,4 @@ function jobKey(printerKey: string, live: PrinterLive, now: number) {
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
+const round2 = (n: number) => Math.round(n * 100) / 100;

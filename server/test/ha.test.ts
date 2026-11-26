@@ -75,7 +75,7 @@ describe('Live-Status aus Home-Assistant-Daten', () => {
 
   it('findet nur den Drucker, nicht AMS oder externe Spule', () => {
     expect(findPrinterDevices(toEntities(FIXTURE))).toEqual([
-      { id: DEVICE, name: 'the_one', model: 'P1S' },
+      { id: DEVICE, name: 'the_one', model: 'P1S', kind: 'bambu' },
     ]);
   });
 
@@ -221,7 +221,9 @@ describe('Home-Assistant-Anbindung über die API', () => {
           local: false,
           ok: true,
           version: '2026.10.4',
-          printers: [{ id: DEVICE, name: 'the_one', model: 'P1S', location: 'Zuhause' }],
+          printers: [
+            { id: DEVICE, name: 'the_one', model: 'P1S', location: 'Zuhause', kind: 'bambu' },
+          ],
         },
       ],
     });

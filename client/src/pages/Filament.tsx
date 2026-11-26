@@ -407,7 +407,9 @@ function SpoolRow({
               <span className="font-medium text-accent-strong dark:text-orange-300">
                 {/_slot_(\d+)$/.exec(spool.haTrayEntity)
                   ? `Im AMS, Slot ${/_slot_(\d+)$/.exec(spool.haTrayEntity)![1]}`
-                  : 'Am Drucker (externe Spule)'}
+                  : /#(\d+)$/.exec(spool.haTrayEntity)
+                    ? `In der MMU, Gate ${/#(\d+)$/.exec(spool.haTrayEntity)![1]}`
+                    : 'Am Drucker (externe Spule)'}
               </span>
             )}
           </div>

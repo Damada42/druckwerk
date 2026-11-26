@@ -1,13 +1,14 @@
 import {
   calcPrinterHourly,
   printerFromDevice,
+  type HaMmuEntity,
   type HaPrinterDevice,
   type Printer,
   type PrinterHourlyCosts,
 } from '@3dapp/shared';
 import { Box, Pencil, Plus, Video } from 'lucide-react';
 import { useState } from 'react';
-import { useHaStatus, useList } from '../api';
+import { useHaStatus, useList, useMmuEntities } from '../api';
 import { EntityForm, type FieldDef } from '../components/EntityForm';
 import { CameraDialog, PrinterCameras } from '../components/PrinterCameras';
 import { PrinterLivePanel } from '../components/PrinterLive';
@@ -21,8 +22,55 @@ const BASE_FIELDS: FieldDef[] = [
   { key: 'name', label: 'Name', required: true, placeholder: 'z.B. P1S Werkstatt' },
   { key: 'model', label: 'Modell', required: true, placeholder: 'z.B. Bambu Lab P1S' },
   { key: 'nozzle', label: 'Düse (mm)', type: 'number', step: '0.1' },
-  { key: 'hasAms', label: 'Mit AMS (automatisches Materialsystem)', type: 'checkbox' },
+  {
+    key: 'hasAms',
+    label: 'Mit AMS bzw. MMU (mehrere Filamente)',
+    type: 'checkbox',
+  },
 ];
+
+/**
+ * Klipper-MMU: Anzahl Slots und Zusatz-Entity mit Gate-Daten – nur bei einem Klipper-Gerät mit
+ * MMU. Ohne gefundene Entities ein Textfeld für die Entity-ID.
+ */
+function mmuFields(
+  devices: HaPrinterDevice[],
+  candidates: HaMmuEntity[],
+  current: string | null | undefined,
+): FieldDef[] {
+  const show = (v: Record<string, unknown>) =>
+    !!v.hasAms && devices.some((d) => d.id === v.haDeviceId && d.kind === 'klipper');
+  const several = new Set(candidates.map((c) => c.location)).size > 1;
+  const options = candidates.map((c) => ({
+    value: c.entityId,
+    label: `${c.name} (${c.entityId})${several ? ` – ${c.location}` : ''}`,
+  }));
+  if (current && !candidates.some((c) => c.entityId === current))
+    options.push({ value: current, label: `${current} (gerade nicht gefunden)` });
+  return [
+    {
+      key: 'slotCount',
+      label: 'Anzahl Slots (MMU)',
+      type: 'number',
+      placeholder: 'automatisch',
+      show,
+    },
+    candidates.length
+      ? {
+          key: 'mmuEntity',
+          label: 'Zusatz-Entity mit Gate-Daten',
+          type: 'select',
+          options,
+          show,
+        }
+      : {
+          key: 'mmuEntity',
+          label: 'Zusatz-Entity mit Gate-Daten',
+          placeholder: 'z.B. sensor.drucker_mmu',
+          show,
+        },
+  ];
+}
 
 const COST_FIELDS: FieldDef[] = [
   { key: 'powerW', label: 'Stromverbrauch (Watt)', type: 'number' },
@@ -181,14 +229,24 @@ export function PrintersPage() {
   const { data: ha } = useHaStatus();
   const [editing, setEditing] = useState<Printer | 'new' | null>(null);
   const [cameraPrinter, setCameraPrinter] = useState<Printer | null>(null);
+  const devices = (ha?.connections ?? []).flatMap((c) => c.printers);
+  const hasKlipper = devices.some((d) => d.kind === 'klipper');
+  const { data: mmu } = useMmuEntities(!!editing && hasKlipper);
   const fields = [
     ...BASE_FIELDS,
-    ...haField(
-      (ha?.connections ?? []).flatMap((c) => c.printers),
-      editing && editing !== 'new' ? editing.haDeviceId : null,
-    ),
+    ...haField(devices, editing && editing !== 'new' ? editing.haDeviceId : null),
+    ...(hasKlipper
+      ? mmuFields(
+          devices,
+          mmu?.entities ?? [],
+          editing && editing !== 'new' ? editing.mmuEntity : null,
+        )
+      : []),
     ...COST_FIELDS,
   ];
+  /** Bei Klipper heißt das Mehrfarbsystem MMU */
+  const systemName = (p: Printer) =>
+    devices.find((d) => d.id === p.haDeviceId)?.kind === 'klipper' ? 'MMU' : 'AMS';
 
   return (
     <>
@@ -220,7 +278,7 @@ export function PrintersPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  {p.hasAms && <Badge>AMS</Badge>}
+                  {p.hasAms && <Badge>{systemName(p)}</Badge>}
                   <Button
                     variant="ghost"
                     className="!p-1.5"

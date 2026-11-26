@@ -14,7 +14,10 @@ Filament-Abbuchung sowie Ersatzteilen und Wartungsplan.
 
 ## Home Assistant
 
-Drucker kommen aus den Integrationen „Bambu Lab“ (mit bis zu vier AMS) und „Moonraker“ (Klipper).
+Drucker kommen aus den Integrationen „Bambu Lab“ (mit bis zu vier AMS) und „Moonraker“ (Klipper,
+auch mit MMU: Gates werden an den Filamentsensoren erkannt oder von Hand angegeben; Material, Farbe
+und aktives Gate kommen optional aus einer Zusatz-Entity, z.B. einem REST-Sensor für Happy Hare –
+siehe README).
 Die Verbindung zu diesem Home Assistant besteht automatisch (Einstellungen in Druckwerk zeigen
 „Dieses Home Assistant (App)“) – kein Token nötig. Weitere Home-Assistant-Instanzen, z.B. in der
 Werkstatt, lassen sich wie gewohnt mit Adresse und langlebigem Zugriffstoken hinzufügen.

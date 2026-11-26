@@ -3,6 +3,7 @@ import {
   PRINT_SPEEDS,
   PRINT_SPEED_LABELS,
   type AmsSlot,
+  type MmuInfo,
   type FilamentSpool,
   type FilamentType,
   type Finish,
@@ -250,7 +251,13 @@ function LiveDetails({ printer, live }: { printer: Printer; live: PrinterLive })
       {printing && <PrintAdjust printer={printer} live={live} />}
 
       {live.ams.length > 0 && (
-        <AmsSlots printerId={printer.id} slots={live.ams} klipper={live.kind === 'klipper'} />
+        <AmsSlots
+          printerId={printer.id}
+          slots={live.ams}
+          klipper={live.kind === 'klipper'}
+          mmu={live.mmu}
+          mmuEntity={printer.mmuEntity}
+        />
       )}
       <Bookings printerId={printer.id} />
     </section>
@@ -554,15 +561,30 @@ function SlotSpoolSelect({
   );
 }
 
-/** AMS-Slots bzw. bei Klipper der eine Platz „Spule“ für die Spule im Drucker */
+/** Text für einen Slot: Bambu-Name, bei MMU-Gates Name und Material aus Happy Hare */
+function slotText(slot: AmsSlot, klipper: boolean) {
+  if (!klipper) return slot.name ?? slot.type ?? '?';
+  if (slot.name && slot.type && !slot.name.toLowerCase().includes(slot.type.toLowerCase()))
+    return `${slot.name} · ${slot.type}`;
+  return slot.name ?? slot.type;
+}
+
+/**
+ * AMS-Slots, bei Klipper der eine Platz „Spule“ für die Spule im Drucker bzw. mit MMU ein Platz
+ * je Gate
+ */
 function AmsSlots({
   printerId,
   slots,
   klipper,
+  mmu,
+  mmuEntity,
 }: {
   printerId: number;
   slots: AmsSlot[];
   klipper: boolean;
+  mmu: MmuInfo | null;
+  mmuEntity: string | null;
 }) {
   const { data: spools = [] } = useList('spools');
   const { data: types = [] } = useList('filament-types');
@@ -574,7 +596,7 @@ function AmsSlots({
   return (
     <div>
       <h3 className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">
-        {klipper ? 'Filament' : 'AMS'}
+        {mmu ? 'MMU' : klipper ? 'Filament' : 'AMS'}
       </h3>
       <ul className="grid gap-2">
         {slots.map((slot) => {
@@ -588,7 +610,11 @@ function AmsSlots({
               )}
             >
               <div className="flex items-center gap-2">
-                <span className="w-9 shrink-0 text-xs font-semibold text-muted">{slot.label}</span>
+                <span
+                  className={cx('shrink-0 text-xs font-semibold text-muted', mmu ? 'w-12' : 'w-9')}
+                >
+                  {slot.label}
+                </span>
                 {/* Klipper meldet keine Farbe: die der zugeordneten Spule zeigen */}
                 {(slot.color ?? (klipper ? linked?.colorHex : null)) ? (
                   <ColorDot color={(slot.color ?? linked?.colorHex)!} />
@@ -598,10 +624,10 @@ function AmsSlots({
                 <span className="min-w-0 flex-1 truncate">
                   {slot.empty ? (
                     <span className="text-muted">leer</span>
-                  ) : klipper ? (
-                    <span className="text-muted">Spule im Drucker</span>
                   ) : (
-                    (slot.name ?? slot.type ?? '?')
+                    (slotText(slot, klipper) ?? (
+                      <span className="text-muted">{mmu ? 'belegt' : 'Spule im Drucker'}</span>
+                    ))
                   )}
                 </span>
                 {slot.remain !== null && (
@@ -612,7 +638,7 @@ function AmsSlots({
                 <div className="mt-2 flex gap-2">
                   <SlotSpoolSelect
                     slot={slot}
-                    label={klipper ? 'Spule im Drucker' : `Spule in ${slot.label}`}
+                    label={klipper && !mmu ? 'Spule im Drucker' : `Spule in ${slot.label}`}
                     linked={linked}
                     spools={spools}
                     types={types}
@@ -620,11 +646,11 @@ function AmsSlots({
                     disabled={link.isPending}
                     onChange={(spoolId) => link.mutate({ entityId: slot.entityId, spoolId })}
                   />
-                  {/* Übernehmen braucht die Angaben aus dem AMS – Klipper kennt die Spule nicht */}
+                  {/* Übernehmen braucht Angaben zur Spule: AMS oder MMU mit Zusatz-Entity */}
                   {!linked && slot.type && (
                     <Button
                       className="shrink-0 !px-2.5 !py-1.5 !text-xs"
-                      title="Spule mit den Daten aus dem AMS im Bestand anlegen und hier zuordnen"
+                      title={`Spule mit den Daten aus ${mmu ? 'der MMU' : 'dem AMS'} im Bestand anlegen und hier zuordnen`}
                       aria-label={`${slot.label} in Bestand übernehmen`}
                       disabled={importSpool.isPending}
                       onClick={() => importSpool.mutate(slot.entityId)}
@@ -639,7 +665,7 @@ function AmsSlots({
                   Lagerplatz: <span className="font-medium">{place.storage(linked)}</span>
                 </p>
               )}
-              {linked?.notes?.startsWith('Aus AMS') && linked.colorName && (
+              {/^Aus (AMS|MMU)/.test(linked?.notes ?? '') && linked?.colorName && (
                 <p className="mt-1.5 text-xs text-muted">
                   Im Bestand als „{linked.colorName}“ –{' '}
                   <Link to="/filament" className="text-accent hover:underline">
@@ -652,10 +678,20 @@ function AmsSlots({
         })}
       </ul>
       <ErrorText error={link.error ?? importSpool.error} />
+      {mmu?.entityFound === false && (
+        <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+          Die Zusatz-Entity „{mmuEntity}“ gibt es in Home Assistant nicht – Gates ohne Material und
+          Farbe.
+        </p>
+      )}
       <p className="mt-2 text-xs text-muted">
-        {klipper
-          ? 'Nach jedem Druck bucht die App die verbrauchte Länge – umgerechnet in Gramm – von der zugeordneten Spule ab.'
-          : 'Nach jedem Druck bucht die App das Druckgewicht von der zugeordneten Spule ab.'}
+        {mmu && !mmu.activeKnown
+          ? 'Welches Gate druckt, meldet Moonraker nicht: Nach jedem Druck bucht die App die verbrauchte Länge nur ab, wenn genau einem Gate eine Spule zugeordnet ist. Mit einer Zusatz-Entity (Happy Hare) am Drucker wird nach Gate aufgeteilt.'
+          : mmu
+            ? 'Nach jedem Druck bucht die App die verbrauchte Länge – umgerechnet in Gramm und nach Druckzeit je Gate aufgeteilt – von den zugeordneten Spulen ab.'
+            : klipper
+              ? 'Nach jedem Druck bucht die App die verbrauchte Länge – umgerechnet in Gramm – von der zugeordneten Spule ab.'
+              : 'Nach jedem Druck bucht die App das Druckgewicht von der zugeordneten Spule ab.'}
       </p>
     </div>
   );

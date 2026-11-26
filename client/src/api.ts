@@ -6,6 +6,7 @@ import {
   type BackupRestoreResult,
   type FilamentBooking,
   type HaCameraList,
+  type HaMmuEntity,
   type HaStatus,
   type MaintenanceDoneResult,
   type MaintenanceLogEntry,
@@ -381,6 +382,16 @@ export function useHaCameras(enabled: boolean) {
   return useQuery({
     queryKey: ['ha-cameras'],
     queryFn: () => api.get<HaCameraList>('/ha/cameras'),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/** Entities mit MMU-Gate-Daten (Happy Hare) zur Auswahl als Zusatz-Entity eines Druckers */
+export function useMmuEntities(enabled: boolean) {
+  return useQuery({
+    queryKey: ['ha-mmu-entities'],
+    queryFn: () => api.get<{ entities: HaMmuEntity[]; errors: string[] }>('/ha/mmu-entities'),
     enabled,
     staleTime: 30_000,
   });

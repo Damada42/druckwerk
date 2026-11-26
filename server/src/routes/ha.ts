@@ -34,6 +34,11 @@ export function registerHaRoutes(app: FastifyInstance, db: Db, ha: HaClient) {
   /** Alle Verbindungen mit Stand und gefundenen Bambu-Druckern (für Einstellungen und Auswahl) */
   app.get('/ha/status', (): Promise<HaStatus> => ha.status());
 
+  /** Entities mit MMU-Gate-Daten (Happy Hare) zur Auswahl als Zusatz-Entity eines Druckers */
+  app.get('/ha/mmu-entities', () =>
+    ha.configured() ? ha.mmuEntities() : { entities: [], errors: [] },
+  );
+
   type ConnectionBody = { Body: { name?: string; url?: string; token?: string } };
   // Verbindungsfehler sind aus Sicht der Einstellungen Eingabefehler (falsche Adresse/Token)
   const inputError = (e: unknown) => {
@@ -92,7 +97,7 @@ export function registerHaRoutes(app: FastifyInstance, db: Db, ha: HaClient) {
               : 'Das verknüpfte Gerät gibt es in Home Assistant nicht mehr – bitte neu wählen.',
           };
         }
-        return { status: 'ok', live: parsePrinterLive(entities, printer.haDeviceId) };
+        return { status: 'ok', live: parsePrinterLive(entities, printer.haDeviceId, printer) };
       } catch (e) {
         return { status: 'error', error: fail(e).message };
       }
@@ -116,7 +121,7 @@ export function registerHaRoutes(app: FastifyInstance, db: Db, ha: HaClient) {
     const places: Record<string, SlotPlace> = {};
     for (const p of printers) {
       if (!p.haDeviceId || !entities.some((e) => e.deviceId === p.haDeviceId)) continue;
-      for (const slot of parsePrinterLive(entities, p.haDeviceId).ams)
+      for (const slot of parsePrinterLive(entities, p.haDeviceId, p).ams)
         places[slot.entityId] = { printerId: p.id, printerName: p.name, slotLabel: slot.label };
     }
     return places;
@@ -195,7 +200,7 @@ export function registerHaRoutes(app: FastifyInstance, db: Db, ha: HaClient) {
       if (!printer?.haDeviceId) return reply.code(404).send({ error: 'Drucker nicht verknüpft' });
       try {
         const { entities } = await ha.entities({ fresh: true });
-        const live = parsePrinterLive(entities, printer.haDeviceId);
+        const live = parsePrinterLive(entities, printer.haDeviceId, printer);
         if (!live.canSetSpeed)
           return reply
             .code(409)
@@ -299,9 +304,11 @@ export function registerHaRoutes(app: FastifyInstance, db: Db, ha: HaClient) {
 
       let slot;
       try {
-        slot = parsePrinterLive((await ha.entities()).entities, printer.haDeviceId).ams.find(
-          (s) => s.entityId === entityId,
-        );
+        slot = parsePrinterLive(
+          (await ha.entities()).entities,
+          printer.haDeviceId,
+          printer,
+        ).ams.find((s) => s.entityId === entityId);
       } catch (e) {
         return reply.code(502).send({ error: fail(e).message });
       }
@@ -342,7 +349,7 @@ export function registerHaRoutes(app: FastifyInstance, db: Db, ha: HaClient) {
                 weightRemainingG:
                   slot.remain === null ? total : Math.round((total * slot.remain) / 100),
                 haTrayEntity: entityId,
-                notes: `Aus AMS ${slot.label} übernommen (${slot.name ?? slot.type})`,
+                notes: `Aus ${slot.label.startsWith('Gate') ? 'MMU' : 'AMS'} ${slot.label} übernommen (${slot.name ?? slot.type})`,
               },
               true,
             ) as typeof schema.filamentSpools.$inferInsert,

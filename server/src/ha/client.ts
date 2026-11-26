@@ -1,12 +1,14 @@
 import {
+  EXTRA_ENTITY,
   findPrinterDevices,
   maskUrl,
   type HaCameraList,
   type HaEntity,
+  type HaMmuEntity,
   type HaStatus,
   type NotifyService,
 } from '@3dapp/shared';
-import { eq } from 'drizzle-orm';
+import { eq, isNotNull } from 'drizzle-orm';
 import type { Db } from '../db/index.js';
 import { schema } from '../db/index.js';
 
@@ -16,7 +18,30 @@ import { schema } from '../db/index.js';
  * Attribute, die sich nicht als JSON ausgeben lassen. „options“ ist bei einigen Sensoren ein Set –
  * daher nur von Selects (Geschwindigkeit) und als Liste.
  */
-export const PRINTER_TEMPLATE = `{%- set keys = ['slot','active','empty','color','name','type','remain','tray_uuid','tray_weight','entity_picture','options','objects','unit_of_measurement'] -%}
+export const PRINTER_TEMPLATE = printerTemplate();
+
+/**
+ * Attribute der Zusatz-Entity eines Klipper-Druckers (MMU mit Happy Hare, z.B. ein REST-Sensor auf
+ * printer/objects/query?mmu). Nur für diese Entities, nicht für die der Integrationen.
+ */
+export const MMU_KEYS = [
+  'num_gates',
+  'gate',
+  'tool',
+  'filament',
+  'gate_status',
+  'gate_material',
+  'gate_color',
+  'gate_filament_name',
+];
+
+/**
+ * Das Drucker-Template, dazu die Zusatz-Entities der Drucker (Klipper-MMU) mit p = „extra“.
+ * Die IDs landen im Template – daher nur solche, die EXTRA_ENTITY erfüllt.
+ */
+export function printerTemplate(extras: string[] = []) {
+  const safe = extras.filter((e) => EXTRA_ENTITY.test(e));
+  return `{%- set keys = ['slot','active','empty','color','name','type','remain','tray_uuid','tray_weight','entity_picture','options','objects','unit_of_measurement'] -%}
 {%- set ns = namespace(out=[]) -%}
 {%- for p in ['bambu_lab', 'moonraker'] -%}
 {%- for e in integration_entities(p) -%}
@@ -26,6 +51,26 @@ export const PRINTER_TEMPLATE = `{%- set keys = ['slot','active','empty','color'
 {%- if s -%}{%- for k in keys if s.attributes[k] is defined and (k != 'options' or e.startswith('select.')) -%}{%- set a.v = dict(a.v, **{k: (s.attributes[k] | list) if k == 'options' else s.attributes[k]}) -%}{%- endfor -%}{%- endif -%}
 {%- set ns.out = ns.out + [{'e': e, 's': s.state if s else none, 'a': a.v, 'd': d, 'v': device_attr(d, 'via_device_id') if d else none, 'n': (device_attr(d, 'name_by_user') or device_attr(d, 'name')) if d else none, 'm': device_attr(d, 'model') if d else none, 'mf': device_attr(d, 'manufacturer') if d else none, 'p': p}] -%}
 {%- endfor -%}
+{%- endfor -%}${
+    safe.length
+      ? `
+{%- for e in ${JSON.stringify(safe)} -%}
+{%- set s = states[e] -%}
+{%- if s -%}
+{%- set a = namespace(v={}) -%}
+{%- for k in ${JSON.stringify(MMU_KEYS)} if s.attributes[k] is defined -%}{%- set a.v = dict(a.v, **{k: s.attributes[k]}) -%}{%- endfor -%}
+{%- set ns.out = ns.out + [{'e': e, 's': s.state, 'a': a.v, 'd': none, 'v': none, 'n': none, 'm': none, 'mf': none, 'p': 'extra'}] -%}
+{%- endif -%}
+{%- endfor -%}`
+      : ''
+  }
+{{ ns.out | tojson }}`;
+}
+
+/** Entities mit Gate-Daten von Happy Hare (für die Auswahl der Zusatz-Entity) */
+export const MMU_TEMPLATE = `{%- set ns = namespace(out=[]) -%}
+{%- for s in states if s.attributes.gate_status is defined or s.attributes.num_gates is defined -%}
+{%- set ns.out = ns.out + [{'e': s.entity_id, 'n': s.name}] -%}
 {%- endfor -%}
 {{ ns.out | tojson }}`;
 
@@ -169,10 +214,21 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch, supervis
   function fetchConnection(conn: Connection, fresh: boolean): Promise<HaEntity[]> {
     const hit = cache.get(conn.id);
     if (!fresh && hit && Date.now() - hit.at < CACHE_MS) return hit.promise;
+    // Zusatz-Entities aller Drucker mitfragen; die Zuordnung zum Standort macht parsePrinterLive
+    const extras = [
+      ...new Set(
+        db
+          .select({ e: schema.printers.mmuEntity })
+          .from(schema.printers)
+          .where(isNotNull(schema.printers.mmuEntity))
+          .all()
+          .map((r) => r.e!),
+      ),
+    ].sort();
     const promise = (async () => {
       const res = await request(conn, '/api/template', {
         method: 'POST',
-        body: JSON.stringify({ template: PRINTER_TEMPLATE }),
+        body: JSON.stringify({ template: printerTemplate(extras) }),
       });
       const raw = JSON.parse(await res.text()) as RawEntity[];
       return raw.map((r) => ({
@@ -401,6 +457,36 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch, supervis
       );
       return {
         cameras: results.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])),
+        errors: results.flatMap((r) =>
+          r.status === 'rejected'
+            ? [r.reason instanceof Error ? r.reason.message : String(r.reason)]
+            : [],
+        ),
+      };
+    },
+
+    /** Entities mit MMU-Gate-Daten (Happy Hare) aller Standorte, zur Auswahl am Drucker */
+    async mmuEntities(): Promise<{ entities: HaMmuEntity[]; errors: string[] }> {
+      const all = connections();
+      const results = await Promise.allSettled(
+        all.map(async (conn) => {
+          const res = await request(conn, '/api/template', {
+            method: 'POST',
+            body: JSON.stringify({ template: MMU_TEMPLATE }),
+          });
+          const raw = JSON.parse(await res.text()) as { e: string; n: string | null }[];
+          return raw
+            .filter((r) => EXTRA_ENTITY.test(r.e))
+            .map((r) => ({
+              connectionId: conn.id,
+              location: conn.name,
+              entityId: r.e,
+              name: r.n ?? r.e,
+            }));
+        }),
+      );
+      return {
+        entities: results.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])),
         errors: results.flatMap((r) =>
           r.status === 'rejected'
             ? [r.reason instanceof Error ? r.reason.message : String(r.reason)]

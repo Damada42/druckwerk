@@ -122,3 +122,46 @@ test('Klipper-Drucker: verknüpfen, Spule zuordnen, Tempo ändern, Verbrauch in 
   await page.reload();
   await expect(card.getByText(/28 g.*Klipper Beige E2E/)).toBeVisible();
 });
+
+test('Klipper mit MMU: Zusatz-Entity wählen, Gates mit Material, Spule übernehmen', async ({
+  page,
+  request,
+}) => {
+  await page.goto('/drucker');
+  await page.getByRole('button', { name: 'A20 Werkstatt bearbeiten' }).click();
+  const dialog = page.getByRole('dialog');
+  // Felder für die MMU erst mit Haken
+  await expect(dialog.getByLabel('Anzahl Slots (MMU)')).toHaveCount(0);
+  await dialog.getByRole('checkbox', { name: 'Mit AMS bzw. MMU (mehrere Filamente)' }).check();
+  await expect(dialog.getByLabel('Anzahl Slots (MMU)')).toHaveAttribute(
+    'placeholder',
+    'automatisch',
+  );
+  await dialog
+    .getByLabel('Zusatz-Entity mit Gate-Daten')
+    .selectOption({ label: 'A20 MMU (sensor.a20_mmu)' });
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await expect(dialog).toBeHidden();
+
+  const card = a20(page);
+  await expect(card.getByText('MMU', { exact: true }).first()).toBeVisible();
+  await expect(card.getByRole('heading', { name: 'MMU' })).toBeVisible();
+  for (const label of ['Gate 0', 'Gate 1', 'Gate 2', 'Gate 3'])
+    await expect(card.getByText(label, { exact: true })).toBeVisible();
+  await expect(card.getByText('leer', { exact: true })).toBeVisible();
+  await expect(card.getByText('eSun PETG')).toBeVisible();
+  await expect(card.getByText(/nach Druckzeit je Gate aufgeteilt/)).toBeVisible();
+
+  // Spule mit den Daten aus Happy Hare anlegen und dem Gate zuordnen
+  await card.getByRole('button', { name: 'Gate 2 in Bestand übernehmen' }).click();
+  await expect(card.getByLabel('Spule in Gate 2')).toContainText('eSun');
+  const spools = (await (await request.get('/api/spools')).json()) as {
+    haTrayEntity: string | null;
+    colorHex: string;
+    notes: string | null;
+  }[];
+  expect(spools.find((s) => s.haTrayEntity === 'sensor.a20_filament_used#2')).toMatchObject({
+    colorHex: '#ff0000',
+    notes: expect.stringMatching(/^Aus MMU Gate 2/),
+  });
+});

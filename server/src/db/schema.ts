@@ -136,6 +136,10 @@ export const printers = sqliteTable('printers', {
   operatingHours: real('operating_hours').notNull().default(0),
   /** Zuletzt aus Home Assistant übernommen; null = von Hand gepflegt */
   operatingHoursAt: text('operating_hours_at'),
+  /** Klipper-MMU: Anzahl Slots (Gates) von Hand; null = erkennen */
+  slotCount: integer('slot_count'),
+  /** Klipper-MMU: zusätzliche Entity mit Gate-Daten (z.B. REST-Sensor von Happy Hare) */
+  mmuEntity: text('mmu_entity'),
   createdAt: createdAt(),
 });
 

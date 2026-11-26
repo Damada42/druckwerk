@@ -4,7 +4,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { schema, type Db } from '../db/index.js';
 import { spoolInSlot, type HaClient } from './client.js';
 import { checkMaintenance } from './maintenance.js';
-import { PrintTracker, type BookingPlan } from './tracker.js';
+import { PrintTracker, UNKNOWN_SLOT, type BookingPlan } from './tracker.js';
 
 const MAINTENANCE_CHECK_MS = 60_000;
 
@@ -21,7 +21,20 @@ export function bookPlan(
   return db.transaction((tx) => {
     const booked: FilamentBooking[] = [];
     for (const share of plan.shares) {
-      const spool = spoolInSlot(tx as unknown as Db, share.entityId);
+      let spool = spoolInSlot(tx as unknown as Db, share.entityId);
+      // Klipper-MMU ohne bekanntes Gate: nur buchen, wenn genau ein Gate eine Spule hat
+      if (share.entityId === UNKNOWN_SLOT) {
+        const linked = (share.candidates ?? [])
+          .map((id) => spoolInSlot(tx as unknown as Db, id))
+          .filter((s) => !!s);
+        if (linked.length !== 1) {
+          log?.warn(
+            `${share.meters} m nicht gebucht: ${linked.length ? `${linked.length} Gates haben eine Spule` : 'kein Gate hat eine Spule'} und welches gedruckt hat, ist unbekannt (Zusatz-Entity mit dem aktiven Gate eintragen)`,
+          );
+          continue;
+        }
+        spool = linked[0];
+      }
       if (!spool) {
         log?.warn(
           `Keine Spule für ${share.entityId} zugeordnet – ${share.meters !== undefined ? `${share.meters} m` : `${share.grams} g`} nicht gebucht`,
@@ -98,7 +111,7 @@ export function createWatcher(db: Db, ha: HaClient, log?: FastifyBaseLogger) {
     if (message && message !== lastError) log?.warn(message);
     lastError = message;
     for (const printer of linked) {
-      const live = parsePrinterLive(entities, printer.haDeviceId!);
+      const live = parsePrinterLive(entities, printer.haDeviceId!, printer);
       // Betriebsstunden übernehmen; ist der Drucker aus („unavailable“), bleibt der letzte Wert
       if (
         live.totalHours !== null &&

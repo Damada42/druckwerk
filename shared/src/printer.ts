@@ -15,7 +15,10 @@ export interface HaEntity {
   manufacturer?: string | null;
   /** Von welcher Home-Assistant-Verbindung (Standort) die Entity stammt */
   connectionId?: number;
-  /** Integration: „bambu_lab“ (Standard, auch wenn es fehlt) oder „moonraker“ (Klipper) */
+  /**
+   * Integration: „bambu_lab“ (Standard, auch wenn es fehlt), „moonraker“ (Klipper) oder „extra“
+   * (beim Drucker eingetragene Zusatz-Entity, z.B. MMU-Daten von Happy Hare)
+   */
   platform?: string;
 }
 
@@ -31,7 +34,37 @@ export interface HaPrinterDevice {
   manufacturer?: string;
   /** Standort-Name der Verbindung, z.B. „Zuhause“ */
   location?: string;
+  /** Bambu oder Klipper (Moonraker) */
+  kind?: PrinterKind;
 }
+
+/** Klipper-MMU: Einstellungen am Drucker (siehe Printer.slotCount / mmuEntity) */
+export interface MmuOptions {
+  slotCount?: number | null;
+  mmuEntity?: string | null;
+}
+
+/** Klipper-MMU: woher die Gates kommen und was über sie bekannt ist */
+export interface MmuInfo {
+  gates: number;
+  /** Anzahl von Hand, aus der Zusatz-Entity oder aus den Gate-Sensoren von Moonraker */
+  source: 'manual' | 'entity' | 'sensors';
+  /** Eingetragene Zusatz-Entity: gefunden (true), fehlt (false), keine eingetragen (null) */
+  entityFound: boolean | null;
+  /** Welches Gate gerade druckt, ist bekannt (nur mit Zusatz-Entity) */
+  activeKnown: boolean;
+}
+
+/** Eine Entity mit MMU-Gate-Daten in Home Assistant (Auswahl der Zusatz-Entity) */
+export interface HaMmuEntity {
+  connectionId: number;
+  location: string;
+  entityId: string;
+  name: string;
+}
+
+/** Entity-ID, die als Zusatz-Entity erlaubt ist (landet im Template an Home Assistant) */
+export const EXTRA_ENTITY = /^[a-z_]+\.[a-z0-9_]+$/;
 
 export const PRINT_STATES = [
   'idle',
@@ -130,6 +163,8 @@ export interface PrinterLive {
   /** Stand des Plattenbilds mit markierten Teilen, null = keins */
   plateVersion: string | null;
   ams: AmsSlot[];
+  /** Klipper mit mehreren Gates (MMU); sonst null */
+  mmu: MmuInfo | null;
   /** Betriebsstunden laut Drucker (Bambu „Gesamtnutzung“, Klipper Gesamtdruckzeit); null = keine */
   totalHours: number | null;
 }
@@ -235,12 +270,13 @@ export function entitiesOfPrinter(entities: HaEntity[], deviceId: string): HaEnt
 export function findPrinterDevices(entities: HaEntity[]): HaPrinterDevice[] {
   const devices = new Map<string, HaPrinterDevice>();
   for (const e of entities) {
-    if (!e.deviceId || e.viaDeviceId || devices.has(e.deviceId)) continue;
+    if (!e.deviceId || e.viaDeviceId || e.platform === 'extra' || devices.has(e.deviceId)) continue;
     devices.set(e.deviceId, {
       id: e.deviceId,
       name: e.deviceName ?? e.deviceId,
       model: e.model ?? '',
       ...(e.manufacturer ? { manufacturer: e.manufacturer } : {}),
+      kind: e.platform === 'moonraker' ? 'klipper' : 'bambu',
     });
   }
   return [...devices.values()];
@@ -373,8 +409,13 @@ export function parseHours(entity: Pick<HaEntity, 'state' | 'attributes'> | unde
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Macht aus den Home-Assistant-Entities eines Druckers einen übersichtlichen Live-Status */
-export function parsePrinterLive(entities: HaEntity[], deviceId: string): PrinterLive {
-  if (printerKind(entities, deviceId) === 'klipper') return parseKlipperLive(entities, deviceId);
+export function parsePrinterLive(
+  entities: HaEntity[],
+  deviceId: string,
+  mmu: MmuOptions = {},
+): PrinterLive {
+  if (printerKind(entities, deviceId) === 'klipper')
+    return parseKlipperLive(entities, deviceId, mmu);
   const mine = entitiesOfPrinter(entities, deviceId);
   const roles = printerRoles(mine, deviceId);
   const byId = new Map(mine.map((e) => [e.entityId, e]));
@@ -428,16 +469,84 @@ export function parsePrinterLive(entities: HaEntity[], deviceId: string): Printe
       (state === 'running' || state === 'pause') && objects.filter((o) => !o.skipped).length > 1,
     plateVersion: get('plate')?.attributes.entity_picture ? (text(value('plate')) ?? 'x') : null,
     ams: amsSlots(mine),
+    mmu: null,
     totalHours: parseHours(get('totalHours')),
   };
 }
 
+/** Höchstzahl Gates einer MMU (Happy Hare kennt bis zu 24, Schutz vor Unsinn aus der Entity) */
+export const MAX_GATES = 24;
+
+/** Klipper-Slot-ID eines Gates: der Verbrauchssensor mit angehängter Gate-Nummer */
+export const gateSlotId = (filamentEntity: string, gate: number) => `${filamentEntity}#${gate}`;
+
+/** Wert einer Liste (Happy-Hare-Attribut wie gate_material) am Gate, sonst undefined */
+const at = (list: unknown, i: number): unknown => (Array.isArray(list) ? list[i] : undefined);
+
+/** Happy Hare: Farbe als „ff0000“, „#FF0000“ oder mit Alpha („ff000080“); Namen ignorieren */
+function gateColor(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const hex = /^#?([0-9a-f]{6})(?:[0-9a-f]{2})?$/i.exec(value.trim());
+  return hex ? `#${hex[1].toLowerCase()}` : null;
+}
+
+/** „Pla“ → „PLA“ (kurze Kürzel), längere Namen bleiben */
+function gateMaterial(value: unknown): string | null {
+  const v = typeof value === 'string' ? value.trim() : '';
+  if (!v || UNSET.has(v.toLowerCase())) return null;
+  return /^[a-z]{2,5}$/i.test(v) ? v.toUpperCase() : v;
+}
+
+function gateName(value: unknown): string | null {
+  const v = typeof value === 'string' ? value.trim() : '';
+  return v && !UNSET.has(v.toLowerCase()) ? v : null;
+}
+
 /**
- * Klipper (Moonraker): Ohne AMS gibt es einen einzigen Platz „Spule“. Er steht für die Spule im
- * Drucker und lässt sich wie ein AMS-Slot mit einer Spule aus dem Bestand verknüpfen; als ID dient
- * der Sensor für den Filamentverbrauch.
+ * Klipper-MMU: Gates aus der Anzahl von Hand, der Zusatz-Entity (Happy Hare: num_gates,
+ * gate_status, gate_material, gate_color, gate_filament_name, gate) oder den Filamentsensoren
+ * an den Gate-Eingängen, die Moonraker meldet (binary_sensor.*_mmu_pre_gate_0, *_mmu_entry_0).
  */
-function parseKlipperLive(entities: HaEntity[], deviceId: string): PrinterLive {
+function klipperGates(
+  own: HaEntity[],
+  extra: HaEntity | undefined,
+  options: MmuOptions,
+): { gates: number; source: MmuInfo['source']; sensors: Map<number, boolean> } {
+  // Belegt laut Sensor: „on“ bei einem der Sensoren des Gates; „off“ nur, wenn keiner „on“ meldet
+  const sensors = new Map<number, boolean>();
+  for (const e of own) {
+    const m = /^binary_sensor\..*_mmu_(?:pre_gate|entry)_(\d+)$/.exec(e.entityId);
+    if (!m || Number(m[1]) >= MAX_GATES) continue;
+    const gate = Number(m[1]);
+    if (e.state === 'on') sensors.set(gate, true);
+    else if (e.state === 'off' && !sensors.has(gate)) sensors.set(gate, false);
+    else if (!sensors.has(gate)) sensors.set(gate, true); // unbekannt: nicht als leer zeigen
+  }
+  const manual = options.slotCount;
+  if (manual && manual > 0)
+    return { gates: Math.min(manual, MAX_GATES), source: 'manual', sensors };
+  const a = extra?.attributes ?? {};
+  const fromEntity =
+    typeof a.num_gates === 'number'
+      ? a.num_gates
+      : Array.isArray(a.gate_status)
+        ? a.gate_status.length
+        : 0;
+  if (fromEntity > 0) return { gates: Math.min(fromEntity, MAX_GATES), source: 'entity', sensors };
+  return { gates: sensors.size ? Math.max(...sensors.keys()) + 1 : 0, source: 'sensors', sensors };
+}
+
+/**
+ * Klipper (Moonraker): Ohne MMU gibt es einen einzigen Platz „Spule“. Er steht für die Spule im
+ * Drucker und lässt sich wie ein AMS-Slot mit einer Spule aus dem Bestand verknüpfen; als ID dient
+ * der Sensor für den Filamentverbrauch. Mit MMU gibt es einen Platz je Gate („Gate 0“ …), die ID
+ * ist der Sensor mit angehängter Gate-Nummer (gateSlotId).
+ */
+function parseKlipperLive(
+  entities: HaEntity[],
+  deviceId: string,
+  options: MmuOptions = {},
+): PrinterLive {
   const mine = entitiesOfPrinter(entities, deviceId);
   const roles = printerRoles(mine, deviceId) as Partial<Record<KlipperRole, string>>;
   const byId = new Map(mine.map((e) => [e.entityId, e]));
@@ -456,6 +565,57 @@ function parseKlipperLive(entities: HaEntity[], deviceId: string): PrinterLive {
   const printing = state === 'running' || state === 'pause';
   const filament = get('filamentUsed');
   const taskName = text(value('taskName'));
+
+  // Zusatz-Entity vom selben Standort wie der Drucker (Entity-IDs sind nur je HA eindeutig)
+  const connectionId = mine.find((e) => e.deviceId === deviceId)?.connectionId;
+  const extra = options.mmuEntity
+    ? entities.find(
+        (e) =>
+          e.platform === 'extra' &&
+          e.entityId === options.mmuEntity &&
+          e.connectionId === connectionId,
+      )
+    : undefined;
+  const { gates, source, sensors } = klipperGates(mine, extra, options);
+  const x = extra?.attributes ?? {};
+  // Happy Hare: aktuelles Gate (-1 unbekannt, -2 Bypass)
+  const activeGate = typeof x.gate === 'number' && x.gate >= 0 ? x.gate : null;
+  const activeKnown = !!extra && typeof x.gate === 'number';
+  const loaded = typeof x.filament === 'string' && /^loaded$/i.test(x.filament);
+
+  let ams: AmsSlot[] = [];
+  if (filament && gates > 1) {
+    ams = Array.from({ length: gates }, (_, gate) => {
+      const status = at(x.gate_status, gate);
+      // Happy Hare: 0 = leer, 1 = bereit, 2 = bereit (aus dem Puffer), -1 = unbekannt
+      const empty = typeof status === 'number' ? status === 0 : sensors.get(gate) === false;
+      return {
+        entityId: gateSlotId(filament.entityId, gate),
+        label: `Gate ${gate}`,
+        name: empty ? null : gateName(at(x.gate_filament_name, gate)),
+        type: empty ? null : gateMaterial(at(x.gate_material, gate)),
+        color: empty ? null : gateColor(at(x.gate_color, gate)),
+        remain: null,
+        weightG: null,
+        empty,
+        active: activeGate === gate && (loaded || state === 'running'),
+      };
+    });
+  } else if (filament) {
+    ams = [
+      {
+        entityId: filament.entityId,
+        label: 'Spule',
+        name: null,
+        type: null,
+        color: null,
+        remain: null,
+        weightG: null,
+        empty: false,
+        active: state === 'running',
+      },
+    ];
+  }
 
   return {
     kind: 'klipper',
@@ -487,21 +647,16 @@ function parseKlipperLive(entities: HaEntity[], deviceId: string): PrinterLive {
     objects: [],
     canSkip: false,
     plateVersion: null,
-    ams: filament
-      ? [
-          {
-            entityId: filament.entityId,
-            label: 'Spule',
-            name: null,
-            type: null,
-            color: null,
-            remain: null,
-            weightG: null,
-            empty: false,
-            active: state === 'running',
-          },
-        ]
-      : [],
+    ams,
+    mmu:
+      ams.length > 1
+        ? {
+            gates,
+            source,
+            entityFound: options.mmuEntity ? !!extra : null,
+            activeKnown,
+          }
+        : null,
     totalHours: parseHours(get('totalHours')),
   };
 }

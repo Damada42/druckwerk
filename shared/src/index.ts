@@ -167,6 +167,10 @@ export interface Printer {
   operatingHours: number;
   /** Zuletzt aus Home Assistant übernommen; null = von Hand gepflegt */
   operatingHoursAt: string | null;
+  /** Klipper-MMU: Anzahl Slots (Gates) von Hand; null = aus Home Assistant erkennen */
+  slotCount: number | null;
+  /** Klipper-MMU: zusätzliche Entity mit Gate-Daten (z.B. REST-Sensor von Happy Hare) */
+  mmuEntity: string | null;
   createdAt: string;
 }
 

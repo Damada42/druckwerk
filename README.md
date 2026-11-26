@@ -268,6 +268,38 @@ Spule im Drucker. Nach jedem Druck rechnet die App die verbrauchte Länge über 
 in Gramm um und bucht sie von dieser Spule ab. Teile überspringen bietet die Moonraker-Integration nicht
 an.
 
+**Klipper mit MMU (z.B. Happy Hare):** Ist am Drucker „Mit AMS bzw. MMU“ angehakt, zeigt die Karte
+einen Platz je Gate („Gate 0“ …). Die Gates erkennt Druckwerk an den Filamentsensoren, die Moonraker
+meldet (`binary_sensor.*_mmu_pre_gate_0`, `*_mmu_entry_0` …); sonst trägst du die „Anzahl Slots“ im
+Druckerformular ein. Material, Farbe, Name und welches Gate gerade druckt meldet die
+Moonraker-Integration nicht. Dafür lässt sich am Drucker eine **Zusatz-Entity** wählen, z.B. ein
+REST-Sensor auf das Happy-Hare-Objekt `mmu`:
+
+```yaml
+rest:
+  - resource: 'http://<klipper-ip>:7125/printer/objects/query?mmu'
+    scan_interval: 30
+    sensor:
+      - name: 'Drucker MMU'
+        value_template: '{{ value_json.result.status.mmu.action }}'
+        json_attributes_path: '$.result.status.mmu'
+        json_attributes:
+          [
+            gate,
+            tool,
+            filament,
+            num_gates,
+            gate_status,
+            gate_material,
+            gate_color,
+            gate_filament_name,
+          ]
+```
+
+Mit ihr kommen Material und Farbe je Gate, „Übernehmen“ legt die Spule im Bestand an, und der
+Verbrauch wird nach Druckzeit auf die Gates aufgeteilt. Ohne Zusatz-Entity bucht Druckwerk nur ab,
+wenn genau einem Gate eine Spule zugeordnet ist.
+
 **Ersatzteile & Wartung:** Unter „Einstellungen → Ersatzteile & Wartung“ einschaltbar.
 
 - **Ersatzteile** (eigene Seite, am Handy unter „Mehr“): Name, Hersteller aus der Herstellerliste,

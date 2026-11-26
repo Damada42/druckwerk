@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.10.0
+
+- Klipper mit **MMU** (z.B. Happy Hare): ein Platz je Gate statt nur einer Spule. Die Gates kommen aus
+  den Filamentsensoren von Moonraker, oder du gibst die Anzahl Slots im Druckerformular an.
+- Optional eine **Zusatz-Entity** am Drucker (z.B. REST-Sensor auf Happy Hares `mmu`-Objekt): dann
+  zeigt Druckwerk Material, Farbe und Name je Gate, „Übernehmen“ legt die Spule im Bestand an, und
+  der Verbrauch wird nach Druckzeit auf die Gates aufgeteilt.
+- Ohne Zusatz-Entity weiß Druckwerk nicht, welches Gate gedruckt hat, und bucht nur ab, wenn genau
+  einem Gate eine Spule zugeordnet ist.
+- Bei Klipper-Druckern heißt es jetzt „MMU“ statt „AMS“.
+
 ## 0.9.0
 
 - Neu: **Ersatzteile & Wartung** (unter Einstellungen einschalten). Ersatzteile mit Hersteller,

@@ -31,6 +31,27 @@ import {
 } from './routes/manufacturers.js';
 import { createHaClient } from './ha/client.js';
 import { createWatcher } from './ha/watcher.js';
+import { EXTRA_ENTITY, MAX_GATES } from '@3dapp/shared';
+
+const badRequest = (message: string) => Object.assign(new Error(message), { statusCode: 400 });
+
+/** Klipper-MMU: Anzahl Slots 1–24 oder leer, Zusatz-Entity als gültige Entity-ID oder leer */
+function prepareMmu(data: Record<string, unknown>) {
+  const out = { ...data };
+  if ('slotCount' in out && out.slotCount !== null) {
+    const n = Number(out.slotCount);
+    if (!Number.isInteger(n) || n < 1 || n > MAX_GATES)
+      throw badRequest(`Anzahl Slots bitte zwischen 1 und ${MAX_GATES}`);
+    out.slotCount = n;
+  }
+  if ('mmuEntity' in out && out.mmuEntity !== null) {
+    const id = String(out.mmuEntity).trim().toLowerCase();
+    if (!EXTRA_ENTITY.test(id))
+      throw badRequest('Zusatz-Entity bitte als Entity-ID angeben, z.B. sensor.drucker_mmu');
+    out.mmuEntity = id;
+  }
+  return out;
+}
 
 /** Angaben, die alle Spulen einer Sorte teilen (Restmenge, Lagerort, Notizen bleiben je Spule) */
 const SPOOL_VARIETY_FIELDS = new Set([
@@ -162,10 +183,12 @@ export async function buildApp(options: AppOptions) {
       registerCrud(api, db, '/printers', schema.printers, {
         required: ['name', 'model'],
         // Betriebsstunden nur über /printers/:id/hours bzw. aus Home Assistant
-        beforeCreate: ({ operatingHoursAt: _at, ...data }) => data,
+        beforeCreate: ({ operatingHoursAt: _at, ...data }) => prepareMmu(data),
         beforeUpdate: ({ operatingHours: _h, operatingHoursAt: _at, ...data }) =>
           // Ohne Home Assistant sind die Stunden wieder von Hand änderbar
-          'haDeviceId' in data && !data.haDeviceId ? { ...data, operatingHoursAt: null } : data,
+          prepareMmu(
+            'haDeviceId' in data && !data.haDeviceId ? { ...data, operatingHoursAt: null } : data,
+          ),
       });
       registerCrud(api, db, '/spools', schema.filamentSpools, {
         required: ['typeId', 'manufacturer', 'colorName'],

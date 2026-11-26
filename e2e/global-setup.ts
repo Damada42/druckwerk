@@ -40,7 +40,26 @@ export default async function globalSetup() {
   const klipper = JSON.parse(
     readFileSync(path.join(__dirname, '../server/test/fixtures/klipper-a20.json'), 'utf8'),
   ) as RawEntity[];
-  const ha = new FakeHa(fixture, undefined, undefined, klipper);
+  // MMU-Daten von Happy Hare als REST-Sensor (Zusatz-Entity, erst nach Auswahl am Drucker genutzt)
+  const mmu: RawEntity = {
+    e: 'sensor.a20_mmu',
+    s: 'Idle',
+    a: {
+      num_gates: 4,
+      gate: 0,
+      filament: 'Loaded',
+      gate_status: [1, 0, 1, 1],
+      gate_material: ['Pla', '', 'PETG', 'PLA'],
+      gate_color: ['ffff00', '', 'ff0000', '2050c0'],
+      gate_filament_name: ['', '', 'eSun PETG', ''],
+    },
+    d: null,
+    v: null,
+    n: 'A20 MMU',
+    m: null,
+    p: 'extra',
+  };
+  const ha = new FakeHa(fixture, undefined, undefined, [...klipper, mmu]);
   await ha.listen(FAKE_HA_PORT);
   // Wie Home-Assistant-Ingress vor dem Testserver
   const ingress = await startIngressProxy(INGRESS_PORT, APP_PORT);

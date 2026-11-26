@@ -184,6 +184,17 @@ export class FakeHa {
     if (auth !== `Bearer ${FAKE_TOKEN}`) return { status: 401, body: '401: Unauthorized' };
     if (method === 'POST' && path === '/api/template' && body.includes('states.camera'))
       return { status: 200, type: 'text/plain', body: JSON.stringify(this.cameras) };
+    // MMU_TEMPLATE: Entities mit Gate-Daten von Happy Hare
+    if (method === 'POST' && path === '/api/template' && body.includes('gate_status is defined'))
+      return {
+        status: 200,
+        type: 'text/plain',
+        body: JSON.stringify(
+          this.entities
+            .filter((x) => 'gate_status' in x.a || 'num_gates' in x.a)
+            .map((x) => ({ e: x.e, n: x.n ?? x.e })),
+        ),
+      };
     const camera = /^\/api\/(camera_proxy|camera_proxy_stream)\/(camera\.\w+)$/.exec(path);
     if (method === 'GET' && camera) {
       const found = this.cameras.find((c) => c.e === camera[2]);

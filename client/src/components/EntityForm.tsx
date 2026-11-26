@@ -30,6 +30,8 @@ export interface FieldDef {
    * bekommt den neuen Wert und die bisherigen Werte, zurück kommen die Felder zum Überschreiben.
    */
   onChange?: (value: unknown, previous: Values) => Values;
+  /** Feld nur zeigen, wenn das für die aktuellen Werte zutrifft (Wert bleibt erhalten) */
+  show?: (values: Values) => boolean;
 }
 
 type Values = Record<string, unknown>;
@@ -117,6 +119,7 @@ export function EntityForm<R extends ResourceName>({
         }}
       >
         {fields.map((f, i) => {
+          if (f.show && !f.show(values)) return null;
           const value = values[f.key];
           const set = (v: unknown) =>
             setValues((s) => ({ ...s, ...f.onChange?.(v, s), [f.key]: v }));
