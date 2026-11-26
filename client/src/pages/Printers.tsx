@@ -5,6 +5,7 @@ import {
   type HaPrinterDevice,
   type Printer,
   type PrinterHourlyCosts,
+  type PrinterModel,
 } from '@3dapp/shared';
 import { Box, Pencil, Plus, Video } from 'lucide-react';
 import { useState } from 'react';
@@ -13,6 +14,7 @@ import { EntityForm, type FieldDef } from '../components/EntityForm';
 import { CameraDialog, PrinterCameras } from '../components/PrinterCameras';
 import { PrinterLivePanel } from '../components/PrinterLive';
 import { PrinterMaintenance } from '../components/PrinterMaintenance';
+import { findModel } from '../components/PrinterModelSelect';
 import { Badge, Button, Card, Empty, PageHeader, cx, euro } from '../components/ui';
 
 const hasCostData = (p: Printer) =>
@@ -20,7 +22,7 @@ const hasCostData = (p: Printer) =>
 
 const BASE_FIELDS: FieldDef[] = [
   { key: 'name', label: 'Name', required: true, placeholder: 'z.B. P1S Werkstatt' },
-  { key: 'model', label: 'Modell', required: true, placeholder: 'z.B. Bambu Lab P1S' },
+  { key: 'model', label: 'Modell', required: true, type: 'printerModel', wide: true },
   { key: 'nozzle', label: 'Düse (mm)', type: 'number', step: '0.1' },
   {
     key: 'hasAms',
@@ -185,7 +187,11 @@ function CostComparison({ printers }: { printers: Printer[] }) {
 }
 
 /** Auswahl des Home-Assistant-Geräts; ohne Verbindung nur ein Hinweis */
-function haField(devices: HaPrinterDevice[], current: string | null | undefined): FieldDef[] {
+function haField(
+  devices: HaPrinterDevice[],
+  current: string | null | undefined,
+  models: PrinterModel[],
+): FieldDef[] {
   if (!devices.length && !current) return [];
   // Bei mehreren Standorten den Standort dazuschreiben
   const several = new Set(devices.map((d) => d.location)).size > 1;
@@ -217,6 +223,8 @@ function haField(devices: HaPrinterDevice[], current: string | null | undefined)
           const current = previous[key];
           if (!current || current === before?.[key]) out[key] = next[key];
         }
+        // Modell aus der Liste wählen, wenn es dort steht (z.B. „Bambu Lab P1S“)
+        if ('model' in out) out.modelId = findModel(models, next.model)?.id ?? null;
         return out;
       },
     },
@@ -227,6 +235,7 @@ export function PrintersPage() {
   const { data: printers = [], isLoading } = useList('printers');
   const { data: projects = [] } = useList('projects');
   const { data: ha } = useHaStatus();
+  const { data: models = [] } = useList('printer-models');
   const [editing, setEditing] = useState<Printer | 'new' | null>(null);
   const [cameraPrinter, setCameraPrinter] = useState<Printer | null>(null);
   const devices = (ha?.connections ?? []).flatMap((c) => c.printers);
@@ -234,7 +243,7 @@ export function PrintersPage() {
   const { data: mmu } = useMmuEntities(!!editing && hasKlipper);
   const fields = [
     ...BASE_FIELDS,
-    ...haField(devices, editing && editing !== 'new' ? editing.haDeviceId : null),
+    ...haField(devices, editing && editing !== 'new' ? editing.haDeviceId : null, models),
     ...(hasKlipper
       ? mmuFields(
           devices,

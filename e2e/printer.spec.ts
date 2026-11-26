@@ -60,15 +60,32 @@ test('Home Assistant in den Einstellungen verbinden', async ({ page }) => {
 test('Drucker verknüpfen: Live-Status und AMS-Slots erscheinen', async ({ page, request }) => {
   await page.goto('/drucker');
   await expect(p1s(page).getByText(/Home-Assistant-Gerät wählen/)).toBeVisible();
-  // Neuer Drucker: Name und Modell kommen aus dem gewählten Gerät, Eingetipptes bleibt
+  // Neuer Drucker: Name und Modell kommen aus dem gewählten Gerät – das Modell aus der Liste
   await page.getByRole('button', { name: 'Drucker', exact: true }).click();
   const fresh = page.getByRole('dialog');
-  await fresh.getByLabel('Modell *').fill('Mein P1S');
+  const chosen = (label: string) =>
+    fresh.getByLabel(label, { exact: true }).locator('option:checked');
   await fresh
     .getByLabel('Home-Assistant-Gerät (Live-Status)')
     .selectOption({ label: 'the_one (P1S)' });
   await expect(fresh.getByLabel('Name *')).toHaveValue('the_one');
-  await expect(fresh.getByLabel('Modell *')).toHaveValue('Mein P1S');
+  await expect(chosen('Hersteller des Druckers')).toHaveText('Bambu Lab');
+  await expect(chosen('Modell')).toHaveText('P1S');
+  // Nur Modelle des gewählten Herstellers; Eingetipptes bleibt beim Gerätewechsel stehen
+  await fresh.getByLabel('Hersteller des Druckers').selectOption({ label: 'Prusa' });
+  await expect(fresh.getByLabel('Modell', { exact: true }).locator('option')).toContainText([
+    'MK4S',
+  ]);
+  await expect(fresh.getByLabel('Modell', { exact: true })).not.toContainText('P1S');
+  await fresh
+    .getByLabel('Modell', { exact: true })
+    .selectOption({ label: 'Nicht in der Liste (freier Text) …' });
+  await fresh.getByLabel('Modell (freier Text)').fill('Mein P1S');
+  await fresh.getByLabel('Home-Assistant-Gerät (Live-Status)').selectOption({ label: '–' });
+  await fresh
+    .getByLabel('Home-Assistant-Gerät (Live-Status)')
+    .selectOption({ label: 'the_one (P1S)' });
+  await expect(fresh.getByLabel('Modell (freier Text)')).toHaveValue('Mein P1S');
   await fresh.getByRole('button', { name: 'Abbrechen' }).click();
 
   // Bestehender Drucker behält Name und Modell beim Verknüpfen
@@ -78,7 +95,9 @@ test('Drucker verknüpfen: Live-Status und AMS-Slots erscheinen', async ({ page,
     .getByLabel('Home-Assistant-Gerät (Live-Status)')
     .selectOption({ label: 'the_one (P1S)' });
   await expect(dialog.getByLabel('Name *')).toHaveValue('P1S');
-  await expect(dialog.getByLabel('Modell *')).toHaveValue('Bambu Lab P1S');
+  await expect(dialog.getByLabel('Modell', { exact: true }).locator('option:checked')).toHaveText(
+    'P1S',
+  );
   await dialog.getByRole('button', { name: 'Speichern' }).click();
   await expect(dialog).toBeHidden();
 

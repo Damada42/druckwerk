@@ -1,0 +1,1 @@
+ALTER TABLE `spare_parts` DROP COLUMN `printer_model`;

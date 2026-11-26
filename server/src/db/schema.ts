@@ -58,6 +58,19 @@ export const manufacturers = sqliteTable('manufacturers', {
   name: text('name').notNull().unique(),
 });
 
+/** Druckermodelle je Hersteller (Liste unter „Einstellungen“) */
+export const printerModels = sqliteTable(
+  'printer_models',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    manufacturerId: integer('manufacturer_id')
+      .notNull()
+      .references(() => manufacturers.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+  },
+  (t) => [uniqueIndex('printer_models_manufacturer_name').on(t.manufacturerId, t.name)],
+);
+
 export const finishes = sqliteTable('finishes', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull().unique(),
@@ -121,6 +134,8 @@ export const printers = sqliteTable('printers', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
   model: text('model').notNull(),
+  /** Modell aus der Liste; model ist dann „Hersteller Modell“ */
+  modelId: integer('model_id').references(() => printerModels.id, { onDelete: 'set null' }),
   nozzle: real('nozzle').notNull().default(0.4),
   hasAms: integer('has_ams', { mode: 'boolean' }).notNull().default(false),
   /** Device-ID in Home Assistant für Live-Status und Steuerung */
@@ -156,10 +171,23 @@ export const spareParts = sqliteTable('spare_parts', {
   storageLocationId: integer('storage_location_id').references(() => storageLocations.id, {
     onDelete: 'set null',
   }),
-  printerModel: text('printer_model'),
   notes: text('notes'),
   createdAt: createdAt(),
 });
+
+/** Für welche Druckermodelle ein Ersatzteil passt */
+export const sparePartModels = sqliteTable(
+  'spare_part_models',
+  {
+    partId: integer('part_id')
+      .notNull()
+      .references(() => spareParts.id, { onDelete: 'cascade' }),
+    modelId: integer('model_id')
+      .notNull()
+      .references(() => printerModels.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.partId, t.modelId] })],
+);
 
 /** Wartungspunkte je Drucker: Intervall in Betriebsstunden und/oder Monaten */
 export const maintenanceTasks = sqliteTable('maintenance_tasks', {
@@ -179,6 +207,8 @@ export const maintenanceTasks = sqliteTable('maintenance_tasks', {
   lastDoneAt: text('last_done_at'),
   /** Bis zu welcher Stufe schon eine Push-Nachricht verschickt wurde */
   notifiedLevel: text('notified_level').$type<MaintenanceLevel>(),
+  /** Zeitpunkt der letzten Nachricht (für Erinnerungen) */
+  notifiedAt: text('notified_at'),
   notes: text('notes'),
   position: integer('position').notNull().default(0),
   createdAt: createdAt(),

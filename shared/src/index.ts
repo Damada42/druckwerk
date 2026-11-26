@@ -116,6 +116,18 @@ export interface Manufacturer {
   name: string;
 }
 
+/** Druckermodell aus der Liste, mit dem Namen des Herstellers */
+export interface PrinterModel {
+  id: number;
+  manufacturerId: number;
+  manufacturer: string;
+  name: string;
+}
+
+/** Anzeigename eines Modells: „Bambu Lab P1S“ */
+export const modelLabel = (m: Pick<PrinterModel, 'manufacturer' | 'name'>) =>
+  `${m.manufacturer} ${m.name}`;
+
 export interface Finish {
   id: number;
   name: string;
@@ -151,6 +163,8 @@ export interface Printer {
   id: number;
   name: string;
   model: string;
+  /** Modell aus der Liste; model ist dann „Hersteller Modell“ */
+  modelId: number | null;
   nozzle: number;
   hasAms: boolean;
   /** Verknüpftes Gerät in Home Assistant (Device-ID) für den Live-Status */

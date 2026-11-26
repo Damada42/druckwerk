@@ -44,6 +44,7 @@ export const GROUP_TABLES: Record<BackupGroup, TablePart[]> = {
   filament: [
     { table: 'filament_types' },
     { table: 'manufacturers' },
+    { table: 'printer_models' },
     { table: 'finishes' },
     { table: 'filament_spools' },
     { table: 'filament_products' },
@@ -55,6 +56,7 @@ export const GROUP_TABLES: Record<BackupGroup, TablePart[]> = {
     { table: 'printer_cameras' },
     { table: 'ha_connections' },
     { table: 'spare_parts' },
+    { table: 'spare_part_models' },
     { table: 'maintenance_tasks' },
     { table: 'maintenance_log' },
   ],

@@ -28,7 +28,8 @@ export const BACKUP_GROUP_HINTS: Record<BackupGroup, string> = {
   projects: 'mit Filament, Kosten, Belegen, Angeboten und Rechnungen',
   customers: 'Kundenliste',
   team: 'Personen im Team',
-  filament: 'Spulen, Typen, Hersteller, Finishes, gemerkte Barcodes, Abbuchungen',
+  filament:
+    'Spulen, Typen, Hersteller und Druckermodelle, Finishes, gemerkte Barcodes, Abbuchungen',
   storage: 'Lagerplätze',
   printers: 'mit Kameras, Home-Assistant-Verbindungen, Ersatzteilen und Wartung',
   company: 'Firmenprofil für Angebote und Rechnungen, Logo',

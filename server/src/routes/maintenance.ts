@@ -1,7 +1,8 @@
 import {
   MAINTENANCE_KINDS,
+  SAMPLE_MESSAGE_VARS,
   isoDate,
-  parseNotifyTarget,
+  renderMessage,
   taskStatus,
   type MaintenanceDoneResult,
   type MaintenanceLogItem,
@@ -11,11 +12,13 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { schema, type Db } from '../db/index.js';
 import type { HaClient } from '../ha/client.js';
+import { readTargets, sendToAll } from '../ha/maintenance.js';
 import { canonicalManufacturer } from './manufacturers.js';
-import { parseId, pickColumns, registerCrud } from './crud.js';
+import { parseId, pickColumns } from './crud.js';
 import { readSettings } from './storage.js';
 
-const { printers, spareParts, maintenanceTasks, maintenanceLog } = schema;
+const { printers, spareParts, sparePartModels, printerModels, maintenanceTasks, maintenanceLog } =
+  schema;
 
 const badRequest = (message: string) => Object.assign(new Error(message), { statusCode: 400 });
 
@@ -62,6 +65,7 @@ function prepareTask(
   const result = { ...data };
   delete result.baseHours;
   delete result.notifiedLevel;
+  delete result.notifiedAt;
   delete result.printerId;
   if (typeof result.name === 'string') result.name = result.name.trim();
   if ('name' in result && !result.name) throw badRequest('Bitte einen Namen eintragen.');
@@ -98,10 +102,95 @@ function baseFor(printerHours: number, raw: unknown) {
 export function registerMaintenanceRoutes(app: FastifyInstance, db: Db, ha: HaClient) {
   const printerById = (id: number) => db.select().from(printers).where(eq(printers.id, id)).get();
 
-  registerCrud(app, db, '/spare-parts', spareParts, {
-    required: ['name'],
-    beforeCreate: (data) => preparePart(db, data),
-    beforeUpdate: (data) => preparePart(db, data),
+  /** Teile mit den IDs der passenden Druckermodelle */
+  const withModels = (rows: (typeof spareParts.$inferSelect)[]) => {
+    const links = rows.length
+      ? db
+          .select()
+          .from(sparePartModels)
+          .where(
+            inArray(
+              sparePartModels.partId,
+              rows.map((r) => r.id),
+            ),
+          )
+          .all()
+      : [];
+    return rows.map((r) => ({
+      ...r,
+      modelIds: links.filter((l) => l.partId === r.id).map((l) => l.modelId),
+    }));
+  };
+  const partById = (id: number) =>
+    withModels(db.select().from(spareParts).where(eq(spareParts.id, id)).all())[0];
+
+  /** Zuordnung zu Druckermodellen ersetzen; unbekannte Modelle → 400 */
+  function setModels(tx: Db, partId: number, raw: unknown) {
+    if (raw === undefined) return;
+    if (!Array.isArray(raw) || !raw.every((id) => Number.isInteger(id)))
+      throw badRequest('Ungültige Druckermodelle.');
+    const ids = [...new Set(raw as number[])];
+    if (ids.length) {
+      const known = tx
+        .select({ id: printerModels.id })
+        .from(printerModels)
+        .where(inArray(printerModels.id, ids))
+        .all();
+      if (known.length !== ids.length) throw badRequest('Unbekanntes Druckermodell.');
+    }
+    tx.delete(sparePartModels).where(eq(sparePartModels.partId, partId)).run();
+    if (ids.length)
+      tx.insert(sparePartModels)
+        .values(ids.map((modelId) => ({ partId, modelId })))
+        .run();
+  }
+
+  app.get('/spare-parts', () =>
+    withModels(db.select().from(spareParts).orderBy(spareParts.id).all()),
+  );
+
+  app.get<{ Params: { id: string } }>('/spare-parts/:id', (req, reply) => {
+    return partById(parseId(req.params.id)) ?? reply.code(404).send({ error: 'Nicht gefunden' });
+  });
+
+  app.post<{ Body: Record<string, unknown> }>('/spare-parts', (req, reply) => {
+    const data = preparePart(db, pickColumns(spareParts, req.body));
+    if (!data.name) return reply.code(400).send({ error: 'Bitte einen Namen eintragen.' });
+    const id = db.transaction((tx) => {
+      const row = tx
+        .insert(spareParts)
+        .values(data as typeof spareParts.$inferInsert)
+        .returning()
+        .get();
+      setModels(tx as unknown as Db, row.id, req.body?.modelIds);
+      return row.id;
+    });
+    return reply.code(201).send(partById(id));
+  });
+
+  app.put<{ Params: { id: string }; Body: Record<string, unknown> }>(
+    '/spare-parts/:id',
+    (req, reply) => {
+      const id = parseId(req.params.id);
+      if (!partById(id)) return reply.code(404).send({ error: 'Nicht gefunden' });
+      const data = preparePart(db, pickColumns(spareParts, req.body));
+      db.transaction((tx) => {
+        if (Object.keys(data).length)
+          tx.update(spareParts).set(data).where(eq(spareParts.id, id)).run();
+        setModels(tx as unknown as Db, id, req.body?.modelIds);
+      });
+      return partById(id);
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>('/spare-parts/:id', (req, reply) => {
+    const result = db
+      .delete(spareParts)
+      .where(eq(spareParts.id, parseId(req.params.id)))
+      .run();
+    return result.changes
+      ? reply.code(204).send()
+      : reply.code(404).send({ error: 'Nicht gefunden' });
   });
 
   /** Lagerbestand um delta Stück ändern (nie unter 0) */
@@ -116,7 +205,7 @@ export function registerMaintenanceRoutes(app: FastifyInstance, db: Db, ha: HaCl
         .where(eq(spareParts.id, parseId(req.params.id)))
         .returning()
         .get();
-      return row ?? reply.code(404).send({ error: 'Nicht gefunden' });
+      return row ? partById(row.id) : reply.code(404).send({ error: 'Nicht gefunden' });
     },
   );
 
@@ -179,6 +268,7 @@ export function registerMaintenanceRoutes(app: FastifyInstance, db: Db, ha: HaCl
         );
       // Geänderter Punkt: Benachrichtigung neu bewerten
       data.notifiedLevel = null;
+      data.notifiedAt = null;
       return db
         .update(maintenanceTasks)
         .set(data)
@@ -237,10 +327,15 @@ export function registerMaintenanceRoutes(app: FastifyInstance, db: Db, ha: HaCl
                     name: item.part.name,
                     manufacturer: manufacturer || null,
                     shopUrl: item.part.shopUrl,
-                    printerModel: printer.model,
                   })
                   .returning()
                   .get().id;
+              // Teil passt zum Modell des Druckers
+              if (printer.modelId)
+                tx.insert(sparePartModels)
+                  .values({ partId, modelId: printer.modelId })
+                  .onConflictDoNothing()
+                  .run();
             }
             return createTask(tx as unknown as Db, printer, {
               name: item.name,
@@ -329,7 +424,12 @@ export function registerMaintenanceRoutes(app: FastifyInstance, db: Db, ha: HaCl
               .run();
         }
         tx.update(maintenanceTasks)
-          .set({ baseHours: printer.operatingHours, lastDoneAt: doneAt, notifiedLevel: null })
+          .set({
+            baseHours: printer.operatingHours,
+            lastDoneAt: doneAt,
+            notifiedLevel: null,
+            notifiedAt: null,
+          })
           .where(eq(maintenanceTasks.id, task.id))
           .run();
         return {
@@ -385,6 +485,7 @@ export function registerMaintenanceRoutes(app: FastifyInstance, db: Db, ha: HaCl
             baseHours: item.prevBaseHours,
             lastDoneAt: item.prevLastDoneAt,
             notifiedLevel: null,
+            notifiedAt: null,
           })
           .where(eq(maintenanceTasks.id, item.taskId))
           .run();
@@ -402,14 +503,28 @@ export function registerMaintenanceRoutes(app: FastifyInstance, db: Db, ha: HaCl
   /** Benachrichtigungsdienste der Companion App (für die Einstellungen) */
   app.get('/ha/notify-services', () => ha.notifyServices());
 
-  /** Probe-Nachricht an das gewählte Ziel */
-  app.post<{ Body: { target?: string } }>('/maintenance/test-notify', async (req, reply) => {
-    const target = parseNotifyTarget(req.body?.target ?? readSettings(db).maintenanceNotify);
-    if (!target) return reply.code(400).send({ error: 'Bitte zuerst ein Gerät wählen.' });
-    await ha.notify(target.connectionId, target.service, {
-      title: 'Druckwerk',
-      message: 'Test: So sieht ein Wartungshinweis aus.',
-    });
-    return { ok: true };
-  });
+  /**
+   * Probe-Nachricht mit Beispielwerten an die gewählten Ziele (Standard: die gespeicherten),
+   * im eingestellten oder mitgeschickten Mustertext; Ergebnis je Ziel
+   */
+  app.post<{ Body: { targets?: unknown; title?: unknown; message?: unknown } }>(
+    '/maintenance/test-notify',
+    async (req, reply) => {
+      const settings = readSettings(db);
+      const body = req.body ?? {};
+      const targets = readTargets(
+        Array.isArray(body.targets) ? (body.targets as string[]) : settings.maintenanceNotify,
+      );
+      if (!targets.length) return reply.code(400).send({ error: 'Bitte zuerst ein Ziel wählen.' });
+      const title = typeof body.title === 'string' ? body.title : settings.maintenanceTitle;
+      const message = typeof body.message === 'string' ? body.message : settings.maintenanceMessage;
+      const results = await sendToAll(ha, targets, {
+        title: `Test: ${renderMessage(title, SAMPLE_MESSAGE_VARS) || 'Druckwerk'}`,
+        message: renderMessage(message, SAMPLE_MESSAGE_VARS) || 'So sieht ein Wartungshinweis aus.',
+      });
+      if (results.every((r) => r.error))
+        return reply.code(502).send({ error: results.map((r) => r.error).join(' · '), results });
+      return { results };
+    },
+  );
 }

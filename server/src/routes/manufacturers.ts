@@ -2,8 +2,9 @@ import { and, asc, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { schema, type Db } from '../db/index.js';
 import { parseId } from './crud.js';
+import { syncPrinterModelText } from './printerModels.js';
 
-const { manufacturers, filamentSpools, filamentProducts, spareParts } = schema;
+const { manufacturers, filamentSpools, filamentProducts, spareParts, printerModels } = schema;
 
 const badRequest = (message: string) => Object.assign(new Error(message), { statusCode: 400 });
 
@@ -104,12 +105,15 @@ export function registerManufacturerRoutes(app: FastifyInstance, db: Db) {
           .set({ manufacturer: name })
           .where(sql`lower(trim(${table.manufacturer})) = lower(${current.name})`)
           .run();
-      return tx
+      const row = tx
         .update(manufacturers)
         .set({ name })
         .where(eq(manufacturers.id, id))
         .returning()
         .get();
+      // Drucker mit einem Modell dieses Herstellers heißen jetzt „Neuer Name Modell“
+      syncPrinterModelText(tx as unknown as Db);
+      return row;
     });
   });
 
@@ -134,6 +138,15 @@ export function registerManufacturerRoutes(app: FastifyInstance, db: Db) {
     if (parts)
       return reply.code(409).send({
         error: `${current.name} wird noch von ${parts} ${parts === 1 ? 'Ersatzteil' : 'Ersatzteilen'} verwendet.`,
+      });
+    const models = db
+      .select({ id: printerModels.id })
+      .from(printerModels)
+      .where(eq(printerModels.manufacturerId, id))
+      .all().length;
+    if (models)
+      return reply.code(409).send({
+        error: `${current.name} hat noch ${models} ${models === 1 ? 'Druckermodell' : 'Druckermodelle'}.`,
       });
     db.delete(manufacturers).where(eq(manufacturers.id, id)).run();
     return reply.code(204).send();

@@ -23,6 +23,7 @@ import { registerDocumentRoutes } from './routes/documents.js';
 import { registerCostCategoryRoutes } from './routes/costCategories.js';
 import { registerBackupRoutes } from './routes/backup.js';
 import { registerMaintenanceRoutes } from './routes/maintenance.js';
+import { applyPrinterModel, registerPrinterModelRoutes } from './routes/printerModels.js';
 import {
   canonicalManufacturer,
   parseMinStock,
@@ -179,15 +180,20 @@ export async function buildApp(options: AppOptions) {
         beforeUpdate: typeMinStock,
       });
       registerManufacturerRoutes(api, db);
+      registerPrinterModelRoutes(api, db);
       registerCrud(api, db, '/finishes', schema.finishes, { required: ['name'] });
       registerCrud(api, db, '/printers', schema.printers, {
         required: ['name', 'model'],
         // Betriebsstunden nur über /printers/:id/hours bzw. aus Home Assistant
-        beforeCreate: ({ operatingHoursAt: _at, ...data }) => prepareMmu(data),
+        beforeCreate: ({ operatingHoursAt: _at, ...data }) =>
+          applyPrinterModel(db, prepareMmu(data)),
         beforeUpdate: ({ operatingHours: _h, operatingHoursAt: _at, ...data }) =>
-          // Ohne Home Assistant sind die Stunden wieder von Hand änderbar
-          prepareMmu(
-            'haDeviceId' in data && !data.haDeviceId ? { ...data, operatingHoursAt: null } : data,
+          applyPrinterModel(
+            db,
+            // Ohne Home Assistant sind die Stunden wieder von Hand änderbar
+            prepareMmu(
+              'haDeviceId' in data && !data.haDeviceId ? { ...data, operatingHoursAt: null } : data,
+            ),
           ),
       });
       registerCrud(api, db, '/spools', schema.filamentSpools, {

@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { useSave, type ResourceName, type Resources } from '../api';
 import { ManufacturerSelect } from './ManufacturerSelect';
+import { PrinterModelSelect, PrinterModelsSelect } from './PrinterModelSelect';
 import { Button, ErrorText, Field, Modal, Select, TextArea, TextInput } from './ui';
 
 export interface FieldDef {
@@ -19,7 +20,11 @@ export interface FieldDef {
     | 'checkbox'
     | 'select'
     /** Auswahl aus der Herstellerliste, mit „Neuer Hersteller …“ */
-    | 'manufacturer';
+    | 'manufacturer'
+    /** Druckermodell (Wert: Text wie „Bambu Lab P1S“; setzt dazu modelId) */
+    | 'printerModel'
+    /** Mehrere Druckermodelle (Wert: Liste von IDs) */
+    | 'printerModels';
   options?: { value: string | number; label: string }[];
   required?: boolean;
   wide?: boolean;
@@ -84,6 +89,8 @@ export function EntityForm<R extends ResourceName>({
         v !== undefined
           ? Number(String(v).replace(',', '.'))
           : (v ?? null);
+      if (f.type === 'printerModel') data.modelId = values.modelId ?? null;
+      if (f.type === 'printerModels') data[f.key] = (v as number[] | undefined) ?? [];
     }
     if (onSave) custom.mutate(data);
     else save.mutate({ ...data, id } as never, { onSuccess: onClose });
@@ -167,6 +174,17 @@ export function EntityForm<R extends ResourceName>({
                   onChange={set}
                   autoFocus={i === 0}
                 />
+              ) : f.type === 'printerModel' ? (
+                <PrinterModelSelect
+                  modelId={(values.modelId as number | null | undefined) ?? null}
+                  text={(value as string) ?? ''}
+                  autoFocus={i === 0}
+                  onChange={(modelId, text) =>
+                    setValues((s) => ({ ...s, ...f.onChange?.(text, s), modelId, [f.key]: text }))
+                  }
+                />
+              ) : f.type === 'printerModels' ? (
+                <PrinterModelsSelect value={(value as number[]) ?? []} onChange={set} />
               ) : f.type === 'color' ? (
                 <div className="flex gap-2">
                   <input

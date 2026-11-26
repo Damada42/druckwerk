@@ -33,6 +33,7 @@ import type {
   Input,
   Invoice,
   Manufacturer,
+  PrinterModel,
   Person,
   AppSettings,
   CompanyProfile,
@@ -122,6 +123,7 @@ export interface Resources {
   'storage-locations': StorageLocation;
   'cost-categories': CostCategory;
   manufacturers: Manufacturer;
+  'printer-models': PrinterModel;
   'spare-parts': SparePart;
   'maintenance-tasks': MaintenanceTask;
 }
@@ -149,6 +151,14 @@ export function useSave<R extends ResourceName>(name: R) {
     // Umbenannte Hersteller ändern auch die Spulen; Mindestmengen der Typen die Übersicht
     if (name === 'manufacturers' || name === 'filament-types')
       qc.invalidateQueries({ queryKey: ['spools'] });
+    // Umbenannte Hersteller und Modelle ändern den Modelltext der Drucker
+    if (name === 'manufacturers' || name === 'printer-models') {
+      qc.invalidateQueries({ queryKey: ['printers'] });
+      qc.invalidateQueries({ queryKey: ['printer-models'] });
+      qc.invalidateQueries({ queryKey: ['manufacturers'] });
+    }
+    // Gelöschte Modelle nehmen die Zuordnung der Ersatzteile mit
+    if (name === 'printer-models') qc.invalidateQueries({ queryKey: ['spare-parts'] });
     // Neue Hersteller aus einer Spule landen in der Herstellerliste
     if (name === 'spools' || name === 'spare-parts')
       qc.invalidateQueries({ queryKey: ['manufacturers'] });
@@ -178,15 +188,23 @@ export function useSettings() {
 export function useSaveSettings() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: ['settings'],
     mutationFn: (body: Partial<AppSettings>) => api.put<AppSettings>('/settings', body),
     // Schalter sofort umlegen, bei Fehler zurück
     onMutate: (body) => {
+      // Laufendes Laden (z.B. direkt nach dem Öffnen der Seite) würde den neuen Stand
+      // überschreiben. Nicht abwarten: das Häkchen soll sofort umspringen.
+      void qc.cancelQueries({ queryKey: ['settings'] });
       const previous = qc.getQueryData<AppSettings>(['settings']);
       if (previous) qc.setQueryData(['settings'], { ...previous, ...body });
       return { previous };
     },
     onError: (_err, _body, ctx) => qc.setQueryData(['settings'], ctx?.previous),
-    onSuccess: (data) => qc.setQueryData(['settings'], data),
+    // Läuft schon die nächste Änderung (z.B. zwei Häkchen schnell hintereinander), nicht mit dem
+    // älteren Stand vom Server überschreiben – die letzte Antwort enthält alles
+    onSuccess: (data) => {
+      if (qc.isMutating({ mutationKey: ['settings'] }) <= 1) qc.setQueryData(['settings'], data);
+    },
   });
 }
 
@@ -631,8 +649,13 @@ export function useNotifyServices(enabled: boolean) {
   });
 }
 
+/** Testnachricht an die gewählten Ziele, mit dem Mustertext aus dem Formular */
 export function useTestNotify() {
   return useMutation({
-    mutationFn: (target: string) => api.post<void>('/maintenance/test-notify', { target }),
+    mutationFn: (body: { targets: string[]; title: string; message: string }) =>
+      api.post<{ results: { target: string; error: string | null }[] }>(
+        '/maintenance/test-notify',
+        body,
+      ),
   });
 }

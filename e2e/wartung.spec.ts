@@ -83,10 +83,20 @@ test('Wartung: Vorlage übernehmen, Stunden aus HA, Hinweis, erledigt und rückg
   );
   await part.getByRole('button', { name: 'Hotend 0,4 mm eins mehr' }).click();
   await expect(part.getByTestId('stock')).toHaveText('1 Stück');
+  // Teile aus der Vorlage passen zum Modell des Druckers
+  await expect(part.getByText('Bambu Lab P1S')).toBeVisible();
 
-  // Push-Ziel: Companion App aus Home Assistant
+  // Nachrichten: Companion App und ein Telegram-Chat aus Home Assistant
   await page.goto('/einstellungen');
-  await page.getByLabel('Gerät (Companion App)').selectOption({ label: 'Galaxy S25' });
+  await page.getByRole('checkbox', { name: 'Galaxy S25' }).check();
+  await expect(page.getByRole('checkbox', { name: 'Galaxy S25' })).toBeChecked();
+  await page.getByRole('checkbox', { name: 'Werkstatt (222)' }).check();
+  await expect(page.getByRole('checkbox', { name: 'Werkstatt (222)' })).toBeChecked();
+  // Vorlage „Kurz“ in der Vorschau
+  await page.getByLabel('Textvorlage').selectOption({ label: 'Kurz' });
+  await expect(page.getByLabel('Vorschau')).toContainText('2 Wartungspunkt(e) bald fällig');
+  await page.getByLabel('Textvorlage').selectOption({ label: 'Standard' });
+  await expect(page.getByLabel('Titel')).toHaveValue('Wartung {stufe}: {drucker}');
   await page.getByRole('button', { name: 'Test senden' }).click();
   await expect(page.getByText('Testnachricht gesendet.')).toBeVisible();
 
@@ -109,16 +119,26 @@ test('Wartung: Vorlage übernehmen, Stunden aus HA, Hinweis, erledigt und rückg
   await expect(due.getByText('noch 250 h')).toBeVisible();
   await expect(due.getByText('Hotend 0,4 mm · 1 auf Lager')).toBeVisible();
 
-  // Push über die Companion App ging raus
+  // Nachricht ging an die Companion App und an Telegram
   await expect
     .poll(async () => {
       const calls = (await (await request.get(`${HA}/test/calls`)).json()) as {
         domain: string;
+        service: string;
+        entityId?: string;
         data: { title?: string };
       }[];
-      return calls.filter((c) => c.domain === 'notify').map((c) => c.data.title);
+      return calls
+        .filter((c) => c.domain === 'notify')
+        .map((c) => `${c.entityId ?? c.service}: ${c.data.title}`)
+        .sort();
     })
-    .toEqual(['Druckwerk', `Wartung bald fällig: ${p1s.name}`]);
+    .toEqual([
+      'mobile_app_galaxy_s25: Test: Wartung bald fällig: P1S',
+      `mobile_app_galaxy_s25: Wartung bald fällig: ${p1s.name}`,
+      'notify.telegram_bot_111_222: Test: Wartung bald fällig: P1S',
+      `notify.telegram_bot_111_222: Wartung bald fällig: ${p1s.name}`,
+    ]);
 
   // Wartung erledigt: Hotend ist vorausgewählt, Kohlenstoffstangen nicht
   await page.goto('/drucker');
@@ -145,4 +165,47 @@ test('Wartung: Vorlage übernehmen, Stunden aus HA, Hinweis, erledigt und rückg
   await expect(tasks.getByText('Hotend 0,4 mm · 1 auf Lager')).toBeVisible();
 
   await setHours('1752.96');
+});
+
+test('Druckermodelle: in den Einstellungen anlegen, Ersatzteil für mehrere Modelle', async ({
+  page,
+}) => {
+  await page.goto('/einstellungen');
+  const card = page.getByRole('heading', { name: 'Druckermodelle' }).locator('..');
+  await card.getByRole('button', { name: /^Prusa/ }).click();
+  await expect(card.getByText('CORE One L+')).toBeVisible();
+  // Neues Modell eines neuen Herstellers
+  await card.locator('#new-model-maker').selectOption({ label: '＋ Neuer Hersteller …' });
+  await card.locator('#new-model-maker').fill('Artillery');
+  await card.getByLabel('Neues Druckermodell').fill('Sidewinder X1');
+  await card.getByRole('button', { name: 'Hinzufügen' }).click();
+  await expect(card.getByText('Sidewinder X1')).toBeVisible();
+
+  // Ersatzteil für P1S und Sidewinder
+  await page.goto('/ersatzteile');
+  await page.getByRole('button', { name: 'Ersatzteil', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Name *').fill('PTFE-Schlauch 1 m');
+  const maker = dialog.getByLabel('Hersteller für passende Modelle');
+  await maker.selectOption({ label: 'Bambu Lab' });
+  // Nur Modelle von Bambu Lab
+  await expect(dialog.getByRole('button', { name: 'MK4S' })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'P1S', exact: true }).click();
+  await maker.selectOption({ label: 'Artillery' });
+  await dialog.getByRole('button', { name: 'Sidewinder X1', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'Bambu Lab P1S entfernen' })).toBeVisible();
+  await expect(
+    dialog.getByRole('button', { name: 'Artillery Sidewinder X1 entfernen' }),
+  ).toBeVisible();
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await expect(dialog).toBeHidden();
+  const part = page.getByRole('region', { name: 'PTFE-Schlauch 1 m' });
+  await expect(part.getByText('Bambu Lab P1S, Artillery Sidewinder X1')).toBeVisible();
+
+  // Filter nach Modell
+  await page
+    .getByLabel('Nach Druckermodell filtern')
+    .selectOption({ label: 'Artillery Sidewinder X1' });
+  await expect(page.getByRole('region', { name: 'PTFE-Schlauch 1 m' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Hotend 0,4 mm' })).toHaveCount(0);
 });

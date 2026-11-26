@@ -10,13 +10,20 @@ import {
   type MaintenanceTask,
   type NotifyService,
   type Printer,
+  type PrinterModel,
   type SparePart,
+  modelLabel,
 } from '@3dapp/shared';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { schema } from '../src/db/index.js';
 import { FAKE_TOKEN, FakeHa, type RawEntity } from './fake-ha.js';
 
 const P1S = JSON.parse(
@@ -266,7 +273,12 @@ describe('Wartung über die API', () => {
       .map((i) => ({ ...i, intervalHours: 1000 }));
     expect((await json('POST', '/api/printers/1/maintenance-tasks', { items })).status).toBe(201);
     expect((await json('POST', '/api/printers/1/maintenance-tasks', { items })).status).toBe(201);
-    expect((await json<SparePart[]>('GET', '/api/spare-parts')).body).toHaveLength(2);
+    const parts = (await json<SparePart[]>('GET', '/api/spare-parts')).body;
+    expect(parts).toHaveLength(2);
+    // Neue Teile passen zum Modell des Druckers
+    const modelId = (await printer()).modelId;
+    expect(modelId).not.toBeNull();
+    expect(parts.map((p) => p.modelIds)).toEqual([[modelId], [modelId]]);
     expect(await tasks()).toHaveLength(4);
     // Ohne Intervall geht nichts (und nichts wird halb angelegt)
     const bad = await json('POST', '/api/printers/1/maintenance-tasks', {
@@ -296,12 +308,17 @@ describe('Wartung über die API', () => {
 
     const services = (await json<{ services: NotifyService[] }>('GET', '/api/ha/notify-services'))
       .body;
-    expect(services.services).toEqual([{ value: '1:mobile_app_galaxy_s25', label: 'Galaxy S25' }]);
+    expect(services.services).toEqual([
+      { value: '1:mobile_app_galaxy_s25', label: 'Galaxy S25', kind: 'app' },
+      { value: '1:notify.telegram_bot_111_222', label: 'Werkstatt (222)', kind: 'telegram' },
+      { value: '1:notify.telegram_bot_111_333', label: 'Team (-333)', kind: 'telegram' },
+    ]);
     await json('PUT', '/api/settings', {
       maintenance: true,
-      maintenanceNotify: services.services[0].value,
+      maintenanceNotify: [services.services[0].value],
     });
-    expect((await json('PUT', '/api/settings', { maintenanceNotify: 'quatsch' })).status).toBe(400);
+    for (const bad of ['1:mobile_app_galaxy_s25', ['quatsch'], ['1:notify.Telegram']])
+      expect((await json('PUT', '/api/settings', { maintenanceNotify: bad })).status).toBe(400);
 
     const hotend = (
       await json<SparePart>('POST', '/api/spare-parts', { name: 'Hotend', stockQty: 0 })
@@ -332,5 +349,199 @@ describe('Wartung über die API', () => {
 
     expect((await json('POST', '/api/maintenance/test-notify', {})).status).toBe(200);
     expect(notifies()).toHaveLength(3);
+    expect(notifies()[2].data.title).toBe('Test: Wartung bald fällig: P1S');
+  });
+
+  it('Nachricht an mehrere Ziele, Telegram, eigener Text und Erinnerung', async () => {
+    await json('POST', '/api/ha/connections', { name: 'Büro', url: 'ha.test', token: FAKE_TOKEN });
+    await json('PUT', '/api/printers/1', { haDeviceId: DEVICE });
+    ha.set(HOURS, '2000');
+    const minute = 60_000;
+    const day = 24 * 60 * minute;
+    await built.watcher.tick(minute);
+    await json('PUT', '/api/settings', {
+      maintenance: true,
+      maintenanceNotify: ['1:mobile_app_galaxy_s25', '1:notify.telegram_bot_111_222'],
+      maintenanceTitle: '🔧 {drucker} ({modell})',
+      maintenanceMessage:
+        '{anzahl} Punkt(e) {stufe} bei {stunden} h\n{fehlende_teile}\n{unbekannt}',
+      maintenanceRemindDays: 2,
+    });
+    const nozzle = (await json<SparePart>('POST', '/api/spare-parts', { name: 'Düse' })).body;
+    await json('POST', '/api/maintenance-tasks', {
+      printerId: 1,
+      name: 'Düse tauschen',
+      partId: nozzle.id,
+      intervalHours: 100,
+      currentHours: 150,
+    });
+    const notifies = () => ha.calls.filter((c) => c.domain === 'notify');
+    await built.watcher.tick(2 * minute);
+    expect(notifies()).toHaveLength(2);
+    const [app, telegram] = notifies();
+    expect(app).toMatchObject({ service: 'mobile_app_galaxy_s25' });
+    expect(telegram).toMatchObject({
+      service: 'send_message',
+      entityId: 'notify.telegram_bot_111_222',
+    });
+    expect(telegram.data).toEqual({
+      entity_id: 'notify.telegram_bot_111_222',
+      title: '🔧 P1S (Bambu Lab P1S)',
+      message: `1 Punkt(e) fällig bei ${(2000).toLocaleString('de-AT')} h\nFehlt: Düse (1 Stück)\n{unbekannt}`,
+    });
+    // Erinnerung erst nach zwei Tagen, solange fällig
+    await built.watcher.tick(2 * minute + day);
+    expect(notifies()).toHaveLength(2);
+    await built.watcher.tick(3 * minute + 2 * day);
+    expect(notifies()).toHaveLength(4);
+    expect(notifies()[2].data.title).toBe('🔧 P1S (Bambu Lab P1S) (Erinnerung)');
+
+    // Ein Ziel kaputt: das andere bekommt die Testnachricht trotzdem
+    const test = await json<{ results: { target: string; error: string | null }[] }>(
+      'POST',
+      '/api/maintenance/test-notify',
+      {
+        targets: ['1:notify.telegram_bot_111_333', '9:mobile_app_weg'],
+        message: 'Hallo {drucker}',
+      },
+    );
+    expect(test.status).toBe(200);
+    expect(test.body.results.map((r) => !!r.error)).toEqual([false, true]);
+    expect(notifies().at(-1)!.data).toMatchObject({ message: 'Hallo P1S' });
+  });
+
+  it('übernimmt ein einzelnes Ziel aus älteren Versionen', async () => {
+    built.db
+      .insert(schema.settings)
+      .values({ key: 'maintenanceNotify', value: JSON.stringify('1:mobile_app_x') })
+      .run();
+    expect(
+      (await json<{ maintenanceNotify: string[] }>('GET', '/api/settings')).body.maintenanceNotify,
+    ).toEqual(['1:mobile_app_x']);
+  });
+});
+
+describe('Druckermodelle', () => {
+  let built: Awaited<ReturnType<typeof buildApp>>;
+  let uploadDir: string;
+  async function json<T>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, payload?: object) {
+    const res = await built.app.inject({ method, url, payload });
+    return { status: res.statusCode, body: (res.body ? res.json() : undefined) as T };
+  }
+  const models = async () => (await json<PrinterModel[]>('GET', '/api/printer-models')).body;
+  const getPrinter = async (id: number) => (await json<Printer>('GET', `/api/printers/${id}`)).body;
+
+  beforeEach(async () => {
+    uploadDir = mkdtempSync(path.join(tmpdir(), '3dapp-modelle-'));
+    built = await buildApp({ dbFile: ':memory:', uploadDir });
+  });
+  afterEach(async () => {
+    await built.app.close();
+    rmSync(uploadDir, { recursive: true, force: true });
+  });
+
+  it('Migration ordnet bestehende Drucker und Ersatzteile zu', () => {
+    // Datenbank auf dem Stand von 0.10 (bis Migration 0017) mit Altdaten
+    const src = fileURLToPath(new URL('../drizzle', import.meta.url));
+    const old = path.join(uploadDir, 'drizzle');
+    cpSync(src, old, { recursive: true });
+    const journalFile = path.join(old, 'meta', '_journal.json');
+    const journal = JSON.parse(readFileSync(journalFile, 'utf8')) as {
+      entries: { tag: string }[];
+    };
+    journal.entries = journal.entries.filter((e) => e.tag < '0018');
+    writeFileSync(journalFile, JSON.stringify(journal));
+    const sqlite = new Database(':memory:');
+    const db = drizzle(sqlite);
+    migrate(db, { migrationsFolder: old });
+    sqlite.exec(`
+      INSERT INTO printers (name, model) VALUES ('Werkstatt', 'bambu lab p1s'), ('Eigenbau', 'Voron 2.4');
+      INSERT INTO spare_parts (name, printer_model) VALUES ('Düse', 'P1S'), ('Riemen', 'Voron 2.4'), ('Leer', NULL);
+    `);
+    migrate(db, { migrationsFolder: src });
+    const rows = <T>(q: string) => sqlite.prepare(q).all() as T[];
+    expect(
+      rows<{ name: string; model: string | null }>(
+        `SELECT p.name, pm.name AS model FROM printers p LEFT JOIN printer_models pm ON pm.id = p.model_id ORDER BY p.id`,
+      ),
+    ).toEqual([
+      { name: 'Werkstatt', model: 'P1S' },
+      { name: 'Eigenbau', model: null },
+    ]);
+    expect(
+      rows<{ name: string; model: string | null; notes: string | null }>(
+        `SELECT sp.name, pm.name AS model, sp.notes FROM spare_parts sp
+         LEFT JOIN spare_part_models spm ON spm.part_id = sp.id
+         LEFT JOIN printer_models pm ON pm.id = spm.model_id ORDER BY sp.id`,
+      ),
+    ).toEqual([
+      { name: 'Düse', model: 'P1S', notes: null },
+      { name: 'Riemen', model: null, notes: 'Passt für: Voron 2.4' },
+      { name: 'Leer', model: null, notes: null },
+    ]);
+    sqlite.close();
+  });
+
+  it('bringt die Liste mit; der Startdrucker ist der P1S', async () => {
+    const list = await models();
+    expect(list.length).toBeGreaterThan(60);
+    const p1s = list.find((m) => modelLabel(m) === 'Bambu Lab P1S')!;
+    expect(list.filter((m) => m.manufacturer === 'Prusa').map((m) => m.name)).toContain('MK4S');
+    expect(list.map(modelLabel)).toContain('Anycubic Kobra 4 Combo');
+    expect(list.map(modelLabel)).toContain('Creality SPARKX i8');
+    expect((await getPrinter(1)).modelId).toBe(p1s.id);
+  });
+
+  it('Modelle pflegen, Drucker und Ersatzteile zuordnen', async () => {
+    const created = await json<PrinterModel>('POST', '/api/printer-models', {
+      manufacturer: 'artillery',
+      name: 'Sidewinder X1',
+    });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({ manufacturer: 'artillery', name: 'Sidewinder X1' });
+    const sw = created.body;
+    const again = await json('POST', '/api/printer-models', {
+      manufacturerId: sw.manufacturerId,
+      name: 'sidewinder x1',
+    });
+    expect(again.status).toBe(409);
+
+    // Drucker mit Modell: Text kommt aus der Liste
+    const printer = (
+      await json<Printer>('POST', '/api/printers', { name: 'SW', model: 'egal', modelId: sw.id })
+    ).body;
+    expect(printer.model).toBe('artillery Sidewinder X1');
+    const unknown = await json('POST', '/api/printers', { name: 'X', model: 'x', modelId: 999 });
+    expect(unknown.status).toBe(400);
+    // Hersteller und Modell umbenennen zieht den Text nach
+    await json('PUT', `/api/manufacturers/${sw.manufacturerId}`, { name: 'Artillery' });
+    expect((await getPrinter(printer.id)).model).toBe('Artillery Sidewinder X1');
+    await json('PUT', `/api/printer-models/${sw.id}`, {
+      manufacturerId: sw.manufacturerId,
+      name: 'Sidewinder X2',
+    });
+    expect((await getPrinter(printer.id)).model).toBe('Artillery Sidewinder X2');
+
+    // Ersatzteil für zwei Modelle
+    const p1s = (await models()).find((m) => modelLabel(m) === 'Bambu Lab P1S')!;
+    const part = await json<SparePart>('POST', '/api/spare-parts', {
+      name: 'PTFE-Schlauch',
+      modelIds: [sw.id, p1s.id, p1s.id],
+    });
+    expect(part.status).toBe(201);
+    expect([...part.body.modelIds].sort()).toEqual([p1s.id, sw.id].sort());
+    const url = `/api/spare-parts/${part.body.id}`;
+    expect((await json('PUT', url, { modelIds: [12345] })).status).toBe(400);
+    expect((await json<SparePart>('PUT', url, { stockQty: 2 })).body.modelIds).toHaveLength(2);
+
+    // Hersteller mit Modellen lässt sich nicht löschen
+    expect((await json('DELETE', `/api/manufacturers/${sw.manufacturerId}`)).status).toBe(409);
+    // Modell löschen: Drucker behält den Text, das Teil die anderen Modelle
+    expect((await json('DELETE', `/api/printer-models/${sw.id}`)).status).toBe(204);
+    expect(await getPrinter(printer.id)).toMatchObject({
+      modelId: null,
+      model: 'Artillery Sidewinder X2',
+    });
+    expect((await json<SparePart>('GET', url)).body.modelIds).toEqual([p1s.id]);
   });
 });

@@ -7,6 +7,7 @@ import {
   type HaMmuEntity,
   type HaStatus,
   type NotifyService,
+  type NotifyTarget,
 } from '@3dapp/shared';
 import { eq, isNotNull } from 'drizzle-orm';
 import type { Db } from '../db/index.js';
@@ -71,6 +72,13 @@ export function printerTemplate(extras: string[] = []) {
 export const MMU_TEMPLATE = `{%- set ns = namespace(out=[]) -%}
 {%- for s in states if s.attributes.gate_status is defined or s.attributes.num_gates is defined -%}
 {%- set ns.out = ns.out + [{'e': s.entity_id, 'n': s.name}] -%}
+{%- endfor -%}
+{{ ns.out | tojson }}`;
+
+/** Telegram-Chats der Integration „Telegram bot“ (notify-Entities); ohne Integration leer */
+export const TELEGRAM_TEMPLATE = `{%- set ns = namespace(out=[]) -%}
+{%- for e in integration_entities('telegram_bot') if e.startswith('notify.') -%}
+{%- set ns.out = ns.out + [{'e': e, 'n': state_attr(e, 'friendly_name')}] -%}
 {%- endfor -%}
 {{ ns.out | tojson }}`;
 
@@ -385,20 +393,29 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch, supervis
     },
 
     /** Push-Nachricht über einen notify-Dienst (z.B. mobile_app_galaxy) einer Verbindung */
-    async notify(
-      connectionId: number,
-      service: string,
-      message: { title: string; message: string },
-    ) {
-      if (!/^[a-z0-9_]+$/.test(service))
+    /**
+     * Nachricht an einen notify-Dienst (Companion App) oder eine notify-Entity (Telegram, über
+     * notify.send_message)
+     */
+    async notify(target: NotifyTarget, message: { title: string; message: string }) {
+      if (target.entityId !== undefined) {
+        if (!/^notify.[a-z0-9_]+$/.test(target.entityId))
+          throw new HaError('Ungültiges Benachrichtigungsziel', 400);
+        await request(byId(target.connectionId), '/api/services/notify/send_message', {
+          method: 'POST',
+          body: JSON.stringify({ entity_id: target.entityId, ...message }),
+        });
+        return;
+      }
+      if (!/^[a-z0-9_]+$/.test(target.service))
         throw new HaError('Ungültiger Benachrichtigungsdienst', 400);
-      await request(byId(connectionId), `/api/services/notify/${service}`, {
+      await request(byId(target.connectionId), `/api/services/notify/${target.service}`, {
         method: 'POST',
         body: JSON.stringify(message),
       });
     },
 
-    /** Benachrichtigungsdienste der Companion App aller Standorte */
+    /** Nachrichtenziele aller Standorte: Companion App und – falls eingerichtet – Telegram */
     async notifyServices(): Promise<{ services: NotifyService[]; errors: string[] }> {
       const all = connections();
       const results = await Promise.allSettled(
@@ -409,13 +426,27 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch, supervis
             services: Record<string, unknown>;
           }[];
           const notify = domains.find((d) => d.domain === 'notify');
-          return Object.keys(notify?.services ?? {})
+          const where = all.length > 1 ? ` (${conn.name})` : '';
+          const apps: NotifyService[] = Object.keys(notify?.services ?? {})
             .filter((s) => s.startsWith('mobile_app_'))
             .sort()
-            .map((s) => ({
-              value: `${conn.id}:${s}`,
-              label: `${deviceLabel(s)}${all.length > 1 ? ` (${conn.name})` : ''}`,
-            }));
+            .map((s) => ({ value: `${conn.id}:${s}`, label: deviceLabel(s) + where, kind: 'app' }));
+          if (!domains.some((d) => d.domain === 'telegram_bot')) return apps;
+          const tg = await request(conn, '/api/template', {
+            method: 'POST',
+            body: JSON.stringify({ template: TELEGRAM_TEMPLATE }),
+          });
+          const chats = JSON.parse(await tg.text()) as { e: string; n: string | null }[];
+          return [
+            ...apps,
+            ...chats
+              .filter((c) => /^notify.[a-z0-9_]+$/.test(c.e))
+              .map((c): NotifyService => ({
+                value: `${conn.id}:${c.e}`,
+                label: (c.n ?? c.e) + where,
+                kind: 'telegram',
+              })),
+          ];
         }),
       );
       return {

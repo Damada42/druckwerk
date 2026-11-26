@@ -15,8 +15,8 @@ export interface SparePart {
   /** Ab weniger Stück gilt das Teil als knapp; 0 = keine Warnung */
   minStock: number;
   storageLocationId: number | null;
-  /** Für welches Druckermodell das Teil passt (Hinweis, frei) */
-  printerModel: string | null;
+  /** Druckermodelle, für die das Teil passt */
+  modelIds: number[];
   notes: string | null;
   createdAt: string;
 }
@@ -58,6 +58,8 @@ export interface MaintenanceTask {
   lastDoneAt: string | null;
   /** Bis zu welcher Stufe schon eine Push-Nachricht verschickt wurde */
   notifiedLevel: MaintenanceLevel | null;
+  /** Zeitpunkt der letzten Nachricht (für Erinnerungen) */
+  notifiedAt: string | null;
   notes: string | null;
   position: number;
   createdAt: string;
@@ -66,7 +68,7 @@ export interface MaintenanceTask {
 /** Neuer Wartungspunkt: statt baseHours der aktuelle Stand des Zählers (Standard 0) */
 export type MaintenanceTaskInput = Omit<
   MaintenanceTask,
-  'id' | 'createdAt' | 'baseHours' | 'notifiedLevel' | 'position'
+  'id' | 'createdAt' | 'baseHours' | 'notifiedLevel' | 'notifiedAt' | 'position'
 > & { currentHours?: number };
 
 /** Ein Punkt einer erledigten Wartung, mit dem Stand davor (für Rückgängig) */
@@ -249,6 +251,52 @@ export function describeRemaining(status: TaskStatus): string {
     );
   return parts.join(' · ');
 }
+
+/** Platzhalter im Mustertext der Wartungsnachricht */
+export const MESSAGE_PLACEHOLDERS = {
+  drucker: 'Name des Druckers',
+  modell: 'Modell des Druckers',
+  stufe: '„bald fällig“ oder „fällig“',
+  anzahl: 'Anzahl der Wartungspunkte',
+  punkte: 'Wartungspunkte mit Restzeit und Teil, je Zeile einer',
+  stunden: 'Betriebsstunden des Druckers',
+  fehlende_teile: 'Ersatzteile, die fehlen (leer, wenn alles da ist)',
+} as const;
+export type MessageVars = Record<keyof typeof MESSAGE_PLACEHOLDERS, string>;
+
+/** Vorlagen für den Text der Wartungsnachricht */
+export const MESSAGE_PRESETS = [
+  { name: 'Standard', title: 'Wartung {stufe}: {drucker}', message: '{punkte}' },
+  { name: 'Kurz', title: '🔧 {drucker}', message: '{anzahl} Wartungspunkt(e) {stufe}' },
+  {
+    name: 'Ausführlich',
+    title: '🔧 Wartung {stufe}: {drucker} ({modell})',
+    message: 'Betriebsstunden: {stunden} h\n{punkte}\n{fehlende_teile}',
+  },
+] as const;
+
+/** Platzhalter wie {drucker} ersetzen; unbekannte bleiben stehen, leere Zeilen fallen weg */
+export function renderMessage(template: string, vars: Partial<MessageVars>): string {
+  return template
+    .replace(/\{([a-z_]+)\}/g, (all, key: string) =>
+      Object.hasOwn(vars, key) ? (vars[key as keyof MessageVars] ?? '') : all,
+    )
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .join('\n');
+}
+
+/** Beispielwerte für Vorschau und Testnachricht */
+export const SAMPLE_MESSAGE_VARS: MessageVars = {
+  drucker: 'P1S',
+  modell: 'Bambu Lab P1S',
+  stufe: 'bald fällig',
+  anzahl: '2',
+  punkte:
+    '• Düse tauschen (noch 120 h) – Hotend 0,4 mm: 1 auf Lager\n• Kohlenstoffstangen reinigen (noch 5 Tage)',
+  stunden: (1880).toLocaleString('de-AT'),
+  fehlende_teile: 'Fehlt: PTFE-Schlauch (1 Stück)',
+};
 
 /** Ein Punkt der Vorlage; fehlende Intervalle trägt der Benutzer beim Übernehmen ein */
 export interface MaintenanceTemplateItem {

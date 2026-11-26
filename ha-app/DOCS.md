@@ -23,8 +23,10 @@ Die Verbindung zu diesem Home Assistant besteht automatisch (Einstellungen in Dr
 Werkstatt, lassen sich wie gewohnt mit Adresse und langlebigem Zugriffstoken hinzufügen.
 
 Mit eingeschalteter Wartung (Einstellungen → Ersatzteile & Wartung) übernimmt Druckwerk die
-Betriebsstunden der Drucker aus Home Assistant und kann über die Companion App eine Push-Nachricht
-schicken, wenn eine Wartung bald fällig ist.
+Betriebsstunden der Drucker aus Home Assistant und schickt eine Nachricht, wenn eine Wartung bald
+fällig und wenn sie fällig ist – an Handys mit der Companion App und, falls die Integration
+„Telegram bot“ eingerichtet ist, an Telegram-Chats, auch an mehrere zugleich. Der Text kommt aus einer
+Vorlage oder ist selbst geschrieben; eine Erinnerung alle paar Tage lässt sich einschalten.
 
 ## Daten
 

@@ -1,5 +1,18 @@
 # Änderungen
 
+## 0.11.0
+
+- Neu: **Druckermodelle** unter Einstellungen – eine Liste je Hersteller, schon mit gängigen Modellen
+  von Bambu Lab, Prusa, Anycubic, Creality, Elegoo, QIDI, Flashforge und weiteren, selbst erweiterbar.
+- Im Druckerformular erst den Hersteller wählen, dann erscheinen nur dessen Modelle. Beim Verknüpfen
+  mit Home Assistant wird das Modell automatisch gewählt. Bestehende Drucker sind schon zugeordnet.
+- Ersatzteile passen jetzt zu **mehreren Modellen**; die Ersatzteil-Seite lässt sich nach Modell
+  filtern, und beim Wartungspunkt stehen die passenden Teile oben.
+- Wartungsnachrichten an **mehrere Ziele** und auch per **Telegram** (wenn die Telegram-Integration in
+  Home Assistant eingerichtet ist). Text aus einer Vorlage oder selbst geschrieben, mit Vorschau.
+- Optional eine **Erinnerung** alle paar Tage, solange eine Wartung fällig ist.
+- Das bisher gewählte Handy bleibt als Ziel erhalten.
+
 ## 0.10.0
 
 - Klipper mit **MMU** (z.B. Happy Hare): ein Platz je Gate statt nur einer Spule. Die Gates kommen aus

@@ -1,10 +1,20 @@
-import { storagePaths, storageTree, type SparePart } from '@3dapp/shared';
+import { modelLabel, storagePaths, storageTree, type SparePart } from '@3dapp/shared';
 import { ExternalLink, Minus, Pencil, Plus, Wrench } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useList, usePartStock, useSettings } from '../api';
 import { EntityForm, type FieldDef } from '../components/EntityForm';
-import { Badge, Button, Card, Empty, ErrorText, PageHeader, cx, euro } from '../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  Empty,
+  ErrorText,
+  PageHeader,
+  Select,
+  cx,
+  euro,
+} from '../components/ui';
 
 export function SparePartsPage() {
   const { data: settings } = useSettings();
@@ -12,8 +22,11 @@ export function SparePartsPage() {
   const { data: tasks = [] } = useList('maintenance-tasks');
   const { data: printers = [] } = useList('printers');
   const { data: locations = [] } = useList('storage-locations', !!settings?.storageLocations);
+  const { data: models = [] } = useList('printer-models');
   const stock = usePartStock();
   const [editing, setEditing] = useState<SparePart | 'new' | null>(null);
+  /** Filter: nur Teile für dieses Modell (0 = alle) */
+  const [modelFilter, setModelFilter] = useState(0);
 
   if (settings && !settings.maintenance) {
     return (
@@ -36,9 +49,9 @@ export function SparePartsPage() {
     { key: 'name', label: 'Name', required: true, wide: true },
     { key: 'manufacturer', label: 'Hersteller', type: 'manufacturer' },
     { key: 'partNumber', label: 'Artikelnummer' },
-    { key: 'printerModel', label: 'Passt für (Modell)', placeholder: 'z.B. Bambu Lab P1S' },
     { key: 'price', label: 'Preis (€)', type: 'number', step: '0.01' },
     { key: 'shopUrl', label: 'Shop-Link', wide: true, placeholder: 'https://…' },
+    { key: 'modelIds', label: 'Passt für (Druckermodelle)', type: 'printerModels', wide: true },
     { key: 'stockQty', label: 'Auf Lager (Stück)', type: 'number' },
     { key: 'minStock', label: 'Mindestbestand', type: 'number', placeholder: '0 = keine Warnung' },
     ...(withPlaces
@@ -58,7 +71,19 @@ export function SparePartsPage() {
     { key: 'notes', label: 'Notizen', type: 'textarea' },
   ];
 
-  const sorted = [...parts].sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  const modelName = (id: number) => {
+    const m = models.find((x) => x.id === id);
+    return m ? modelLabel(m) : null;
+  };
+  // Im Filter nur Modelle, für die es Teile gibt – und die Modelle der eigenen Drucker
+  const filterIds = new Set([
+    ...parts.flatMap((p) => p.modelIds),
+    ...printers.flatMap((p) => (p.modelId ? [p.modelId] : [])),
+  ]);
+  const filterModels = models.filter((m) => filterIds.has(m.id));
+  const sorted = [...parts]
+    .filter((p) => !modelFilter || p.modelIds.includes(modelFilter))
+    .sort((a, b) => a.name.localeCompare(b.name, 'de'));
 
   return (
     <>
@@ -71,6 +96,25 @@ export function SparePartsPage() {
           </Button>
         }
       />
+      {parts.length > 0 && filterModels.length > 0 && (
+        <div className="mb-4 max-w-xs">
+          <Select
+            aria-label="Nach Druckermodell filtern"
+            value={modelFilter}
+            onChange={(e) => setModelFilter(Number(e.target.value))}
+          >
+            <option value={0}>Alle Druckermodelle</option>
+            {filterModels.map((m) => (
+              <option key={m.id} value={m.id}>
+                {modelLabel(m)}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
+      {!isLoading && parts.length > 0 && sorted.length === 0 && (
+        <Empty>Keine Ersatzteile für dieses Modell.</Empty>
+      )}
       {!isLoading && parts.length === 0 && (
         <Empty>
           Noch keine Ersatzteile. Lege sie hier an oder übernimm bei einem Drucker die Vorlage
@@ -93,8 +137,7 @@ export function SparePartsPage() {
                   <div className="min-w-0">
                     <div className="truncate font-semibold">{p.name}</div>
                     <div className="truncate text-xs text-muted">
-                      {[p.manufacturer, p.partNumber, p.printerModel].filter(Boolean).join(' · ') ||
-                        '–'}
+                      {[p.manufacturer, p.partNumber].filter(Boolean).join(' · ') || '–'}
                     </div>
                   </div>
                 </div>
@@ -153,8 +196,18 @@ export function SparePartsPage() {
                 </div>
               </div>
 
-              {(usedBy.length > 0 || (withPlaces && p.storageLocationId)) && (
+              {(usedBy.length > 0 ||
+                p.modelIds.length > 0 ||
+                (withPlaces && p.storageLocationId)) && (
                 <dl className="mt-3 space-y-1 text-xs">
+                  {p.modelIds.length > 0 && (
+                    <div className="flex gap-2">
+                      <dt className="shrink-0 text-muted">Passt für</dt>
+                      <dd className="min-w-0">
+                        {p.modelIds.map(modelName).filter(Boolean).join(', ')}
+                      </dd>
+                    </div>
+                  )}
                   {withPlaces && p.storageLocationId && (
                     <div className="flex gap-2">
                       <dt className="text-muted">Lagerplatz</dt>
@@ -180,7 +233,7 @@ export function SparePartsPage() {
           title={editing === 'new' ? 'Neues Ersatzteil' : editing.name}
           fields={fields}
           initial={editing === 'new' ? undefined : editing}
-          defaults={{ stockQty: 0, minStock: 0 }}
+          defaults={{ stockQty: 0, minStock: 0, modelIds: modelFilter ? [modelFilter] : [] }}
           onClose={() => setEditing(null)}
         />
       )}

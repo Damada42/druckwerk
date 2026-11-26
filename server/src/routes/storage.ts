@@ -1,6 +1,8 @@
 import {
   DEFAULT_SETTINGS,
   LOW_STOCK_GROUP_LABELS,
+  MAX_NOTIFY_TARGETS,
+  notifyTargets,
   parseNotifyTarget,
   storageSubtree,
   type AppSettings,
@@ -20,6 +22,8 @@ export function readSettings(db: Db): AppSettings {
     const row = rows.find((r) => r.key === key);
     if (row) (result as unknown as Record<string, unknown>)[key] = JSON.parse(row.value);
   }
+  // Bis 0.10: ein Ziel als Text
+  result.maintenanceNotify = notifyTargets(result.maintenanceNotify);
   return result;
 }
 
@@ -31,14 +35,27 @@ export function registerStorageRoutes(app: FastifyInstance, db: Db) {
     const body = req.body ?? {};
     for (const [key, value] of Object.entries(body)) {
       if (!(key in DEFAULT_SETTINGS)) continue;
-      if (typeof value !== typeof DEFAULT_SETTINGS[key as keyof AppSettings])
+      const expected = DEFAULT_SETTINGS[key as keyof AppSettings];
+      if (typeof value !== typeof expected || Array.isArray(value) !== Array.isArray(expected))
         return reply.code(400).send({ error: `Ungültiger Wert für ${key}` });
       if (key === 'lowStockGroup' && !Object.hasOwn(LOW_STOCK_GROUP_LABELS, value as string))
         return reply.code(400).send({ error: `Ungültiger Wert für ${key}` });
       if (typeof value === 'number' && (!Number.isFinite(value) || value < 0))
         return reply.code(400).send({ error: `Ungültiger Wert für ${key}` });
-      if (key === 'maintenanceNotify' && value !== '' && !parseNotifyTarget(value as string))
-        return reply.code(400).send({ error: `Ungültiger Wert für ${key}` });
+      if (key === 'maintenanceNotify') {
+        const targets = value as unknown[];
+        if (targets.length > MAX_NOTIFY_TARGETS)
+          return reply
+            .code(400)
+            .send({ error: `Höchstens ${MAX_NOTIFY_TARGETS} Ziele für Nachrichten` });
+        if (!targets.every((t) => parseNotifyTarget(t)))
+          return reply.code(400).send({ error: `Ungültiger Wert für ${key}` });
+      }
+      if (
+        (key === 'maintenanceTitle' || key === 'maintenanceMessage') &&
+        (value as string).length > 2000
+      )
+        return reply.code(400).send({ error: 'Der Nachrichtentext ist zu lang.' });
       db.insert(settings)
         .values({ key, value: JSON.stringify(value) })
         .onConflictDoUpdate({ target: settings.key, set: { value: JSON.stringify(value) } })

@@ -195,6 +195,20 @@ export class FakeHa {
             .map((x) => ({ e: x.e, n: x.n ?? x.e })),
         ),
       };
+    // TELEGRAM_TEMPLATE: zwei Chats der Integration „Telegram bot“
+    if (
+      method === 'POST' &&
+      path === '/api/template' &&
+      body.includes("integration_entities('telegram_bot')")
+    )
+      return {
+        status: 200,
+        type: 'text/plain',
+        body: JSON.stringify([
+          { e: 'notify.telegram_bot_111_222', n: 'Werkstatt (222)' },
+          { e: 'notify.telegram_bot_111_333', n: 'Team (-333)' },
+        ]),
+      };
     const camera = /^\/api\/(camera_proxy|camera_proxy_stream)\/(camera\.\w+)$/.exec(path);
     if (method === 'GET' && camera) {
       const found = this.cameras.find((c) => c.e === camera[2]);
@@ -217,9 +231,15 @@ export class FakeHa {
         type: 'application/json',
         body: JSON.stringify([
           { domain: 'light', services: { turn_on: {}, turn_off: {} } },
+          { domain: 'telegram_bot', services: { send_message: {} } },
           {
             domain: 'notify',
-            services: { notify: {}, mobile_app_galaxy_s25: {}, persistent_notification: {} },
+            services: {
+              notify: {},
+              send_message: {},
+              mobile_app_galaxy_s25: {},
+              persistent_notification: {},
+            },
           },
         ]),
       };

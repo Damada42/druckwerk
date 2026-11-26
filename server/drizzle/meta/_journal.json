@@ -127,6 +127,20 @@
       "when": 1795696101630,
       "tag": "0017_mmu_slots",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1795709543682,
+      "tag": "0018_printer_models",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1795709584340,
+      "tag": "0019_drop_part_printer_model",
+      "breakpoints": true
     }
   ]
 }

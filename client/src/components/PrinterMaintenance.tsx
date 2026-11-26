@@ -81,7 +81,13 @@ function ProgressBar({ status }: { status: TaskStatus }) {
   );
 }
 
-function taskFields(parts: SparePart[], warnHours: number): FieldDef[] {
+function taskFields(parts: SparePart[], warnHours: number, modelId: number | null): FieldDef[] {
+  // Teile, die zum Modell des Druckers passen, zuerst
+  const fits = (p: SparePart) => modelId !== null && p.modelIds.includes(modelId);
+  const mixed = parts.some(fits) && !parts.every(fits);
+  const sorted = [...parts].sort(
+    (a, b) => Number(fits(b)) - Number(fits(a)) || a.name.localeCompare(b.name, 'de'),
+  );
   return [
     { key: 'name', label: 'Wartungspunkt', required: true, wide: true },
     {
@@ -105,9 +111,9 @@ function taskFields(parts: SparePart[], warnHours: number): FieldDef[] {
       key: 'partId',
       label: 'Benötigtes Ersatzteil',
       type: 'select',
-      options: parts.map((p) => ({
+      options: sorted.map((p) => ({
         value: p.id,
-        label: `${p.name}${p.manufacturer ? ` (${p.manufacturer})` : ''}`,
+        label: `${p.name}${p.manufacturer ? ` (${p.manufacturer})` : ''}${mixed && fits(p) ? ' ✓ passt' : ''}`,
       })),
     },
     { key: 'partQty', label: 'Stück', type: 'number' },
@@ -272,7 +278,7 @@ export function PrinterMaintenance({ printer }: { printer: Printer }) {
         <EntityForm
           resource="maintenance-tasks"
           title={editing === 'new' ? 'Neuer Wartungspunkt' : editing.name}
-          fields={taskFields(parts, defaults.warnHours)}
+          fields={taskFields(parts, defaults.warnHours, printer.modelId)}
           initial={
             editing === 'new'
               ? undefined

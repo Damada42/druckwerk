@@ -1,4 +1,4 @@
-import { count } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema.js';
 
@@ -38,10 +38,21 @@ export function seed(db: BetterSQLite3Database<typeof schema>) {
 
   const [{ n: printerCount }] = db.select({ n: count() }).from(schema.printers).all();
   if (printerCount === 0) {
+    // Die Modellliste legt Migration 0018 an
+    const p1s = db
+      .select({ id: schema.printerModels.id })
+      .from(schema.printerModels)
+      .innerJoin(
+        schema.manufacturers,
+        eq(schema.manufacturers.id, schema.printerModels.manufacturerId),
+      )
+      .where(and(eq(schema.manufacturers.name, 'Bambu Lab'), eq(schema.printerModels.name, 'P1S')))
+      .get();
     db.insert(schema.printers)
       .values({
         name: 'P1S',
         model: 'Bambu Lab P1S',
+        modelId: p1s?.id ?? null,
         nozzle: 0.4,
         hasAms: true,
         // Werte aus Markus' Kostenvergleich

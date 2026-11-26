@@ -14,6 +14,7 @@ import { Link } from 'react-router-dom';
 import { CompanyCard } from '../components/CompanyCard';
 import { CostCategoriesCard } from '../components/CostCategoriesCard';
 import { MaintenanceCard } from '../components/MaintenanceSettings';
+import { PrinterModelsCard } from '../components/PrinterModelsCard';
 import {
   BackupCard,
   FilamentTypesCard,
@@ -45,6 +46,7 @@ export function SettingsPage() {
         </div>
         <ManufacturersCard />
       </div>
+      <PrinterModelsCard />
       <CostCategoriesCard />
       <CompanyCard />
       <StorageCard />

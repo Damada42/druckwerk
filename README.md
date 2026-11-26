@@ -303,8 +303,15 @@ wenn genau einem Gate eine Spule zugeordnet ist.
 **Ersatzteile & Wartung:** Unter „Einstellungen → Ersatzteile & Wartung“ einschaltbar.
 
 - **Ersatzteile** (eigene Seite, am Handy unter „Mehr“): Name, Hersteller aus der Herstellerliste,
-  Artikelnummer, passendes Modell, Shop-Link, Preis, Lagerbestand mit +/− und Mindestbestand. Mit
-  eingeschalteten Lagerplätzen hat jedes Teil seinen Platz und erscheint auch auf der Lager-Seite.
+  Artikelnummer, Shop-Link, Preis, Lagerbestand mit +/− und Mindestbestand. Ein Teil kann zu mehreren
+  Druckermodellen passen (Hersteller wählen, dann die Modelle antippen); die Seite lässt sich nach
+  Modell filtern. Mit eingeschalteten Lagerplätzen hat jedes Teil seinen Platz und erscheint auch auf
+  der Lager-Seite.
+- **Druckermodelle** (Einstellungen): eine Liste je Hersteller, vorbefüllt mit gängigen Modellen
+  (Bambu Lab, Prusa, Anycubic, Creality, Elegoo, QIDI, Flashforge …) und beliebig erweiterbar. Im
+  Druckerformular wählst du erst den Hersteller, dann nur noch dessen Modelle; beim Verknüpfen mit
+  Home Assistant wird das Modell automatisch gewählt. Was nicht in der Liste steht, geht als freier
+  Text. Die Hersteller teilen sich Drucker und Filament.
 - **Wartungsplan je Drucker** (auf der Druckerkarte): Punkte zum Tauschen, Reinigen, Schmieren oder
   Prüfen mit Intervall in Betriebsstunden und/oder Monaten. Fällig ist, was zuerst erreicht wird. Ein
   neuer Punkt startet bei 0 h; der aktuelle Stand lässt sich eintragen.
@@ -313,8 +320,14 @@ wenn genau einem Gate eine Spule zugeordnet ist.
   Home Assistant trägst du die Stunden auf der Druckerkarte selbst ein.
 - **Vorwarnung:** Standard 300 Betriebsstunden bzw. 14 Tage vorher, in den Einstellungen und je Punkt
   änderbar. Die Übersicht zeigt „Wartung fällig“ mit den benötigten Teilen samt Lagerstand und knappe
-  Ersatzteile. Optional schickt Druckwerk je Stufe („bald fällig“, „fällig“) eine Push-Nachricht über
-  die Companion App (Gerät in den Einstellungen wählen, „Test senden“ prüft es).
+  Ersatzteile.
+- **Benachrichtigungen:** an beliebig viele Ziele (bis zu 10) über Home Assistant – Handys mit der
+  Companion App und, wenn in Home Assistant die Integration „Telegram bot“ eingerichtet ist, deren
+  Telegram-Chats. Text aus einer Vorlage (Standard, Kurz, Ausführlich) oder selbst geschrieben, mit
+  Platzhaltern wie `{drucker}`, `{punkte}` oder `{fehlende_teile}`; „Test senden“ schickt eine
+  Probe mit Beispielwerten. **Wann:** Druckwerk prüft jede Minute. Je Drucker kommt eine Nachricht,
+  sobald ein Punkt „bald fällig“ wird, und eine, wenn er fällig ist – optional danach alle N Tage eine
+  Erinnerung, bis die Wartung erledigt ist.
 - **Wartung erledigt:** Setzt die gewählten Zähler zurück (fällige sind vorausgewählt), bucht getauschte
   Teile vom Lager ab und schreibt ins Wartungsprotokoll. Die letzte Wartung lässt sich rückgängig machen.
 - **Vorlage P1S/P1P:** nach Bambus Wartungsempfehlung im Wiki (P1-Serie). Feste Intervalle nennt Bambu
