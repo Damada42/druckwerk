@@ -1,4 +1,5 @@
 import {
+  partLabel,
   storageChildren,
   storageSubtree,
   storageTree,
@@ -389,7 +390,7 @@ function PartPlaceRow({ part: p, locations }: { part: SparePart; locations: Stor
       <Wrench size={16} className="shrink-0 text-muted" />
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium">
-          {p.name}
+          {partLabel(p)}
           {p.manufacturer && <span className="font-normal text-muted"> · {p.manufacturer}</span>}
         </div>
         <div className={cx('text-xs', low ? 'font-medium text-red-600' : 'text-muted')}>
@@ -398,7 +399,7 @@ function PartPlaceRow({ part: p, locations }: { part: SparePart; locations: Stor
       </div>
       <StorageSelect
         className="w-full sm:w-64"
-        aria-label={`Lagerplatz für ${p.name}`}
+        aria-label={`Lagerplatz für ${partLabel(p)}`}
         locations={locations}
         value={p.storageLocationId}
         onChange={(storageLocationId) => save.mutate({ id: p.id, storageLocationId })}

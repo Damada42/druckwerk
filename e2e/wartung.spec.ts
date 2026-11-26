@@ -265,7 +265,9 @@ test('Ersatzteile: Kategorien, Suche, nach Hersteller sortieren, zuklappen', asy
   await expect(page.getByText('Hotend 0,4 mm')).toBeVisible();
   await expect(section('Filamentführung')).toHaveCount(0);
   await page.getByLabel('Ersatzteile suchen').fill('gibtsnicht');
-  await expect(page.getByText('Kein Ersatzteil mit „gibtsnicht“ im Namen.')).toBeVisible();
+  await expect(
+    page.getByText('Kein Ersatzteil mit „gibtsnicht“ im Namen oder in den Notizen.'),
+  ).toBeVisible();
   await page.getByLabel('Ersatzteile suchen').fill('');
 
   // Nach Hersteller
@@ -297,4 +299,36 @@ test('Ersatzteile: Kategorien, Suche, nach Hersteller sortieren, zuklappen', asy
   await dialog.getByRole('button', { name: 'Speichern' }).click();
   await expect(dialog).toBeHidden();
   await expect(section('Werkzeug').getByText('Düsenschlüssel')).toBeVisible();
+});
+
+test('Ersatzteil kopieren, Notiz in der Übersicht und in der Suche', async ({ page }) => {
+  await page.goto('/ersatzteile');
+  const hotend = page.getByRole('region', { name: 'Hotend 0,4 mm', exact: true });
+  await hotend.getByRole('button', { name: 'Hotend 0,4 mm kopieren' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Ersatzteil kopieren' });
+  // Alles übernommen außer dem Bestand
+  await expect(dialog.getByLabel('Name *')).toHaveValue('Hotend 0,4 mm');
+  await expect(dialog.getByRole('button', { name: 'Bambu Lab P1S entfernen' })).toBeVisible();
+  await expect(dialog.getByLabel('Auf Lager (Stück)')).toHaveValue('0');
+  await dialog.getByLabel('Ausführung').fill('gehärtet');
+  // Kategorie bleibt die des Originals
+  await expect(
+    dialog.getByRole('combobox', { name: 'Kategorie' }).locator('option:checked'),
+  ).toHaveText('Hotend');
+  await dialog.getByLabel('Notizen').fill('Gehärteter Stahl, für CF/GF-Filamente');
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await expect(dialog).toBeHidden();
+
+  // Gleicher Name, die Ausführung unterscheidet die beiden
+  const copy = page.getByRole('region', { name: 'Hotend 0,4 mm – gehärtet', exact: true });
+  await expect(copy.getByText('gehärtet', { exact: true })).toBeVisible();
+  await expect(copy.getByTestId('notes')).toHaveText('Gehärteter Stahl, für CF/GF-Filamente');
+  await expect(copy.getByText('Bambu Lab P1S')).toBeVisible();
+  // Das Original bleibt unverändert
+  await expect(hotend.getByTestId('stock')).not.toHaveText('0 Stück');
+
+  // Suche findet auch Text aus der Notiz
+  await page.getByLabel('Ersatzteile suchen').fill('stahl');
+  await expect(copy).toBeVisible();
+  await expect(hotend).toHaveCount(0);
 });

@@ -1,5 +1,13 @@
 # Änderungen
 
+## 0.12.1
+
+- Ersatzteile haben ein Feld **Ausführung** (z.B. „gehärtet“, „0,6 mm“). Es steht neben dem Namen
+  und überall, wo das Teil vorkommt, auch in den Wartungsnachrichten.
+- **Kopieren** bei jedem Ersatzteil: legt ein neues Teil mit denselben Angaben an (ohne Bestand).
+- **Notizen** stehen jetzt direkt auf der Teilekarte; die Suche findet auch Text aus Ausführung und
+  Notizen.
+
 ## 0.12.0
 
 - Ersatzteile haben jetzt **Kategorien** (Hotend, Düsen, Extruder, Filamentführung, AMS / MMU,

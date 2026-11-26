@@ -148,6 +148,13 @@
       "when": 1795729390154,
       "tag": "0020_part_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1795732631601,
+      "tag": "0021_part_variant",
+      "breakpoints": true
     }
   ]
 }

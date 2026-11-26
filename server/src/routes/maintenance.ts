@@ -2,13 +2,14 @@ import {
   MAINTENANCE_KINDS,
   SAMPLE_MESSAGE_VARS,
   isoDate,
+  partLabel,
   renderMessage,
   taskStatus,
   type MaintenanceDoneResult,
   type MaintenanceLogItem,
   type MaintenanceTemplateItem,
 } from '@3dapp/shared';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { schema, type Db } from '../db/index.js';
 import type { HaClient } from '../ha/client.js';
@@ -41,6 +42,7 @@ function preparePart(db: Db, data: Record<string, unknown>) {
   const result = { ...data };
   if (typeof result.name === 'string') result.name = result.name.trim();
   if ('name' in result && !result.name) throw badRequest('Bitte einen Namen eintragen.');
+  if ('variant' in result) result.variant = String(result.variant ?? '').trim() || null;
   if ('manufacturer' in result)
     result.manufacturer = canonicalManufacturer(db, result.manufacturer) || null;
   for (const [key, label] of [
@@ -320,6 +322,8 @@ export function registerMaintenanceRoutes(app: FastifyInstance, db: Db, ha: HaCl
                 .where(
                   and(
                     sql`lower(${spareParts.name}) = lower(${item.part.name})`,
+                    // Vorlagen meinen das Standardteil, keine besondere Ausführung
+                    isNull(spareParts.variant),
                     sql`lower(coalesce(${spareParts.manufacturer}, '')) = lower(${manufacturer})`,
                   ),
                 )
@@ -422,7 +426,12 @@ export function registerMaintenanceRoutes(app: FastifyInstance, db: Db, ha: HaCl
         if (part && req.body?.bookParts && task.kind === 'replace') {
           booked = Math.min(part.stockQty, task.partQty);
           if (booked < task.partQty)
-            missing.push({ partId: part.id, name: part.name, needed: task.partQty, booked });
+            missing.push({
+              partId: part.id,
+              name: partLabel(part),
+              needed: task.partQty,
+              booked,
+            });
           if (booked)
             tx.update(spareParts)
               .set({ stockQty: part.stockQty - booked })
@@ -443,7 +452,7 @@ export function registerMaintenanceRoutes(app: FastifyInstance, db: Db, ha: HaCl
           name: task.name,
           kind: task.kind,
           partId: part?.id ?? null,
-          partName: part?.name ?? null,
+          partName: part ? partLabel(part) : null,
           booked,
           usedHours: taskStatus(task, printer.operatingHours, new Date(), defaults).usedHours,
           prevBaseHours: task.baseHours,

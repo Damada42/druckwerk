@@ -162,6 +162,8 @@ export const printers = sqliteTable('printers', {
 export const spareParts = sqliteTable('spare_parts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
+  /** Ausführung, z.B. „gehärtet“ */
+  variant: text('variant'),
   manufacturer: text('manufacturer'),
   partNumber: text('part_number'),
   shopUrl: text('shop_url'),

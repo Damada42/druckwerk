@@ -5,6 +5,8 @@
 export interface SparePart {
   id: number;
   name: string;
+  /** Ausführung, z.B. „gehärtet“ oder „0,6 mm“ – unterscheidet sonst gleiche Teile */
+  variant: string | null;
   manufacturer: string | null;
   /** Artikelnummer des Herstellers bzw. Shops */
   partNumber: string | null;
@@ -22,6 +24,10 @@ export interface SparePart {
   notes: string | null;
   createdAt: string;
 }
+
+/** Name eines Teils mit Ausführung: „Hotend 0,4 mm – gehärtet“ */
+export const partLabel = (p: { name: string; variant?: string | null }) =>
+  p.variant?.trim() ? `${p.name} – ${p.variant.trim()}` : p.name;
 
 export const MAINTENANCE_KINDS = ['replace', 'clean', 'lube', 'check'] as const;
 export type MaintenanceKind = (typeof MAINTENANCE_KINDS)[number];

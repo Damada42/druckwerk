@@ -15,6 +15,7 @@ import {
   type SparePart,
   guessPartCategory,
   modelLabel,
+  partLabel,
 } from '@3dapp/shared';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
@@ -663,6 +664,28 @@ describe('Ersatzteil-Kategorien', () => {
       expect(
         (await json<SparePart>('GET', `/api/spare-parts/${chosen.body.id}`)).body.categoryId,
       ).toBeNull();
+    });
+
+    it('Ausführung unterscheidet sonst gleiche Teile; die Vorlage nimmt das Standardteil', async () => {
+      const hard = await json<SparePart>('POST', '/api/spare-parts', {
+        name: 'Hotend 0,4 mm',
+        variant: '  gehärtet ',
+        manufacturer: 'Bambu Lab',
+      });
+      expect(hard.body.variant).toBe('gehärtet');
+      expect(partLabel(hard.body)).toBe('Hotend 0,4 mm – gehärtet');
+      expect(
+        (await json<SparePart>('PUT', `/api/spare-parts/${hard.body.id}`, { variant: '' })).body
+          .variant,
+      ).toBeNull();
+      await json('PUT', `/api/spare-parts/${hard.body.id}`, { variant: 'gehärtet' });
+
+      const hotend = P1_TEMPLATE.find((t) => t.part?.name === 'Hotend 0,4 mm')!;
+      await json('POST', '/api/printers/1/maintenance-tasks', {
+        items: [{ ...hotend, intervalHours: 2000 }],
+      });
+      const parts = (await json<SparePart[]>('GET', '/api/spare-parts')).body;
+      expect(parts.map(partLabel).sort()).toEqual(['Hotend 0,4 mm', 'Hotend 0,4 mm – gehärtet']);
     });
 
     it('Vorlage legt Teile mit Kategorie an', async () => {

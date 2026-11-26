@@ -303,11 +303,12 @@ wenn genau einem Gate eine Spule zugeordnet ist.
 **Ersatzteile & Wartung:** Unter „Einstellungen → Ersatzteile & Wartung“ einschaltbar.
 
 - **Ersatzteile** (eigene Seite, am Handy unter „Mehr“): Name, Hersteller aus der Herstellerliste,
-  Kategorie, Artikelnummer, Shop-Link, Preis, Lagerbestand mit +/− und Mindestbestand. Ein Teil kann
+  Ausführung (z.B. „gehärtet“, steht neben dem Namen), Kategorie, Artikelnummer, Shop-Link, Preis, Lagerbestand mit +/− und Mindestbestand. Ein Teil kann
   zu mehreren Druckermodellen passen: Der Hersteller des Teils zeigt gleich dessen Modelle zum
   Antippen, darunter lassen sich Modelle anderer Hersteller dazuwählen. Die Seite ist nach Kategorie
-  (Standard) oder Hersteller in zusammenklappbare Abschnitte gegliedert, mit Suche nach dem Namen und
-  Filter nach Modell. Mit eingeschalteten Lagerplätzen hat jedes Teil seinen Platz und erscheint auch
+  (Standard) oder Hersteller in zusammenklappbare Abschnitte gegliedert, mit Suche in Name und
+  Notizen und Filter nach Modell. Notizen stehen direkt auf der Karte; „Kopieren“ legt ein neues
+  Teil mit denselben Angaben an (ohne Bestand), z.B. für eine andere Düsengröße. Mit eingeschalteten Lagerplätzen hat jedes Teil seinen Platz und erscheint auch
   auf der Lager-Seite.
 - **Ersatzteil-Kategorien** (Einstellungen → Ersatzteile & Wartung): vorbefüllt mit Hotend, Düsen,
   Extruder, Filamentführung, AMS / MMU, Druckbett, Achsen & Führungen, Antrieb & Motoren, Kühlung,

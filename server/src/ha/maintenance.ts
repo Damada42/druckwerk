@@ -2,6 +2,7 @@ import {
   MAINTENANCE_LEVELS,
   describeRemaining,
   parseNotifyTarget,
+  partLabel,
   renderMessage,
   taskStatus,
   type MaintenanceLevel,
@@ -99,13 +100,13 @@ export async function checkMaintenance(
       const part = parts.find((p) => p.id === task.partId);
       const missing = part ? Math.max(0, task.partQty - part.stockQty) : 0;
       const partText = part
-        ? ` – ${part.name}: ${part.stockQty} auf Lager${missing ? `, ${missing} fehlt` : ''}`
+        ? ` – ${partLabel(part)}: ${part.stockQty} auf Lager${missing ? `, ${missing} fehlt` : ''}`
         : '';
       raised.push({
         id: task.id,
         level: status.level,
         line: `• ${task.name} (${describeRemaining(status)})${partText}`,
-        missing: part && missing ? `${part.name} (${missing} Stück)` : null,
+        missing: part && missing ? `${partLabel(part)} (${missing} Stück)` : null,
       });
     }
     if (!raised.length || !targets.length) continue;

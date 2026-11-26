@@ -1,12 +1,22 @@
 import {
   guessPartCategory,
+  partLabel,
   modelLabel,
   storagePaths,
   storageTree,
   type PartCategory,
   type SparePart,
 } from '@3dapp/shared';
-import { ChevronRight, ExternalLink, Minus, Pencil, Plus, Search, Wrench } from 'lucide-react';
+import {
+  ChevronRight,
+  Copy,
+  ExternalLink,
+  Minus,
+  Pencil,
+  Plus,
+  Search,
+  Wrench,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useList, usePartStock, useSettings } from '../api';
@@ -53,7 +63,8 @@ interface PartGroup {
 
 /** Teile in Abschnitte: nach Kategorie (Reihenfolge der Einstellungen) oder Hersteller (A–Z) */
 function groupParts(parts: SparePart[], mode: SortMode, categories: PartCategory[]): PartGroup[] {
-  const byName = (a: SparePart, b: SparePart) => a.name.localeCompare(b.name, 'de');
+  const byName = (a: SparePart, b: SparePart) =>
+    partLabel(a).localeCompare(partLabel(b), 'de', { numeric: true });
   if (mode === 'category') {
     const groups: PartGroup[] = categories.map((c) => ({
       key: String(c.id),
@@ -91,7 +102,8 @@ export function SparePartsPage() {
   const { data: models = [] } = useList('printer-models');
   const { data: categories = [] } = useList('part-categories');
   const stock = usePartStock();
-  const [editing, setEditing] = useState<SparePart | 'new' | null>(null);
+  /** Teil bearbeiten, neu anlegen oder als Vorlage für ein neues kopieren */
+  const [editing, setEditing] = useState<SparePart | 'new' | { copyOf: SparePart } | null>(null);
   /** Filter: nur Teile für dieses Modell (0 = alle) */
   const [modelFilter, setModelFilter] = useState(0);
   const [query, setQuery] = useState('');
@@ -140,6 +152,11 @@ export function SparePartsPage() {
         !s.id && !s.categoryChosen ? { categoryId: guessId(String(v ?? '')) ?? null } : {},
     },
     {
+      key: 'variant',
+      label: 'Ausführung',
+      placeholder: 'z.B. gehärtet, 0,6 mm, Edelstahl',
+    },
+    {
       key: 'categoryId',
       label: 'Kategorie',
       type: 'select',
@@ -184,7 +201,7 @@ export function SparePartsPage() {
   const sorted = parts.filter(
     (p) =>
       (!modelFilter || p.modelIds.includes(modelFilter)) &&
-      (!search || p.name.toLowerCase().includes(search)),
+      (!search || `${partLabel(p)}\n${p.notes ?? ''}`.toLowerCase().includes(search)),
   );
   const groups = groupParts(sorted, sort, categories);
   // Beim Suchen sind alle Abschnitte mit Treffern offen
@@ -217,7 +234,7 @@ export function SparePartsPage() {
               type="search"
               className="pl-9"
               aria-label="Ersatzteile suchen"
-              placeholder="Suchen nach Name …"
+              placeholder="Suchen in Name und Notizen …"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -257,7 +274,7 @@ export function SparePartsPage() {
       {!isLoading && parts.length > 0 && sorted.length === 0 && (
         <Empty>
           {search
-            ? `Kein Ersatzteil mit „${query.trim()}“ im Namen.`
+            ? `Kein Ersatzteil mit „${query.trim()}“ im Namen oder in den Notizen.`
             : 'Keine Ersatzteile für dieses Modell.'}
         </Empty>
       )}
@@ -301,9 +318,28 @@ export function SparePartsPage() {
       {editing && (
         <EntityForm
           resource="spare-parts"
-          title={editing === 'new' ? 'Neues Ersatzteil' : editing.name}
+          title={
+            editing === 'new'
+              ? 'Neues Ersatzteil'
+              : 'copyOf' in editing
+                ? 'Ersatzteil kopieren'
+                : editing.name
+          }
           fields={fields}
-          initial={editing === 'new' ? undefined : editing}
+          initial={
+            editing === 'new'
+              ? undefined
+              : 'copyOf' in editing
+                ? // Alles übernehmen außer Bestand; die Kategorie bleibt, auch wenn der Name sich ändert
+                  ({
+                    ...editing.copyOf,
+                    id: undefined,
+                    createdAt: undefined,
+                    stockQty: 0,
+                    categoryChosen: true,
+                  } as unknown as SparePart)
+                : editing
+          }
           defaults={{ stockQty: 0, minStock: 0, modelIds: modelFilter ? [modelFilter] : [] }}
           onClose={() => setEditing(null)}
         />
@@ -317,35 +353,53 @@ export function SparePartsPage() {
       .filter((t) => t.partId === p.id)
       .map((t) => `${printers.find((pr) => pr.id === t.printerId)?.name ?? '?'}: ${t.name}`);
     return (
-      <Card key={p.id} className="p-4" role="region" aria-label={p.name}>
+      <Card key={p.id} className="p-4" role="region" aria-label={partLabel(p)}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-strong dark:text-orange-300">
               <Wrench size={20} />
             </span>
             <div className="min-w-0">
-              <div className="truncate font-semibold">{p.name}</div>
+              <div className="truncate font-semibold">
+                {p.name}
+                {p.variant && (
+                  <span className="ml-1.5 rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium">
+                    {p.variant}
+                  </span>
+                )}
+              </div>
               <div className="truncate text-xs text-muted">
                 {[p.manufacturer, p.partNumber].filter(Boolean).join(' · ') || '–'}
               </div>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            className="!p-1.5"
-            aria-label={`${p.name} bearbeiten`}
-            title="Bearbeiten"
-            onClick={() => setEditing(p)}
-          >
-            <Pencil size={16} />
-          </Button>
+          <div className="flex shrink-0 items-center">
+            <Button
+              variant="ghost"
+              className="!p-1.5"
+              aria-label={`${partLabel(p)} kopieren`}
+              title="Kopieren (als neues Teil)"
+              onClick={() => setEditing({ copyOf: p })}
+            >
+              <Copy size={16} />
+            </Button>
+            <Button
+              variant="ghost"
+              className="!p-1.5"
+              aria-label={`${partLabel(p)} bearbeiten`}
+              title="Bearbeiten"
+              onClick={() => setEditing(p)}
+            >
+              <Pencil size={16} />
+            </Button>
+          </div>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Button
               className="!p-1.5"
-              aria-label={`${p.name} eins weniger`}
+              aria-label={`${partLabel(p)} eins weniger`}
               disabled={p.stockQty === 0 || stock.isPending}
               onClick={() => stock.mutate({ id: p.id, delta: -1 })}
             >
@@ -362,7 +416,7 @@ export function SparePartsPage() {
             </span>
             <Button
               className="!p-1.5"
-              aria-label={`${p.name} eins mehr`}
+              aria-label={`${partLabel(p)} eins mehr`}
               disabled={stock.isPending}
               onClick={() => stock.mutate({ id: p.id, delta: 1 })}
             >
@@ -385,6 +439,11 @@ export function SparePartsPage() {
           </div>
         </div>
 
+        {p.notes?.trim() && (
+          <p className="mt-3 text-xs whitespace-pre-line text-muted" data-testid="notes">
+            {p.notes.trim()}
+          </p>
+        )}
         {(usedBy.length > 0 || p.modelIds.length > 0 || (withPlaces && p.storageLocationId)) && (
           <dl className="mt-3 space-y-1 text-xs">
             {p.modelIds.length > 0 && (

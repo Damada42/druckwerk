@@ -4,6 +4,7 @@ import {
   MAINTENANCE_LEVEL_LABELS,
   describeRemaining,
   isoDate,
+  partLabel,
   taskStatus,
   templateForModel,
   type MaintenanceLevel,
@@ -62,7 +63,7 @@ export function PartStock({ task, part }: { task: MaintenanceTask; part: SparePa
   return (
     <span className="text-xs text-muted">
       {task.partQty > 1 ? `${task.partQty} × ` : ''}
-      {part.name} ·{' '}
+      {partLabel(part)} ·{' '}
       <span className={cx('tabular-nums', missing > 0 && 'font-medium text-red-600')}>
         {part.stockQty} auf Lager{missing > 0 && `, ${missing} fehlt`}
       </span>
@@ -86,7 +87,9 @@ function taskFields(parts: SparePart[], warnHours: number, modelId: number | nul
   const fits = (p: SparePart) => modelId !== null && p.modelIds.includes(modelId);
   const mixed = parts.some(fits) && !parts.every(fits);
   const sorted = [...parts].sort(
-    (a, b) => Number(fits(b)) - Number(fits(a)) || a.name.localeCompare(b.name, 'de'),
+    (a, b) =>
+      Number(fits(b)) - Number(fits(a)) ||
+      partLabel(a).localeCompare(partLabel(b), 'de', { numeric: true }),
   );
   return [
     { key: 'name', label: 'Wartungspunkt', required: true, wide: true },
@@ -113,7 +116,7 @@ function taskFields(parts: SparePart[], warnHours: number, modelId: number | nul
       type: 'select',
       options: sorted.map((p) => ({
         value: p.id,
-        label: `${p.name}${p.manufacturer ? ` (${p.manufacturer})` : ''}${mixed && fits(p) ? ' ✓ passt' : ''}`,
+        label: `${partLabel(p)}${p.manufacturer ? ` (${p.manufacturer})` : ''}${mixed && fits(p) ? ' ✓ passt' : ''}`,
       })),
     },
     { key: 'partQty', label: 'Stück', type: 'number' },

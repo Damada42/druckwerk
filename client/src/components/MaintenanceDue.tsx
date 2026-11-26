@@ -2,6 +2,7 @@ import {
   describeRemaining,
   dueMaintenance,
   lowParts,
+  partLabel,
   MAINTENANCE_LEVEL_LABELS,
 } from '@3dapp/shared';
 import { Link } from 'react-router-dom';
@@ -72,7 +73,7 @@ export function MaintenanceDueCard() {
             {low.map((p) => (
               <li key={p.id} className="flex justify-between gap-2 text-sm">
                 <Link to="/ersatzteile" className="truncate hover:text-accent">
-                  {p.name}
+                  {partLabel(p)}
                 </Link>
                 <span className="shrink-0 tabular-nums">
                   <span className="font-medium text-red-600">{p.stockQty}</span>
