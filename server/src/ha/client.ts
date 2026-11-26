@@ -4,6 +4,7 @@ import {
   type HaCameraList,
   type HaEntity,
   type HaStatus,
+  type NotifyService,
 } from '@3dapp/shared';
 import { eq } from 'drizzle-orm';
 import type { Db } from '../db/index.js';
@@ -327,6 +328,50 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch, supervis
       cache.delete(conn.id);
     },
 
+    /** Push-Nachricht über einen notify-Dienst (z.B. mobile_app_galaxy) einer Verbindung */
+    async notify(
+      connectionId: number,
+      service: string,
+      message: { title: string; message: string },
+    ) {
+      if (!/^[a-z0-9_]+$/.test(service))
+        throw new HaError('Ungültiger Benachrichtigungsdienst', 400);
+      await request(byId(connectionId), `/api/services/notify/${service}`, {
+        method: 'POST',
+        body: JSON.stringify(message),
+      });
+    },
+
+    /** Benachrichtigungsdienste der Companion App aller Standorte */
+    async notifyServices(): Promise<{ services: NotifyService[]; errors: string[] }> {
+      const all = connections();
+      const results = await Promise.allSettled(
+        all.map(async (conn) => {
+          const res = await request(conn, '/api/services');
+          const domains = (await res.json()) as {
+            domain: string;
+            services: Record<string, unknown>;
+          }[];
+          const notify = domains.find((d) => d.domain === 'notify');
+          return Object.keys(notify?.services ?? {})
+            .filter((s) => s.startsWith('mobile_app_'))
+            .sort()
+            .map((s) => ({
+              value: `${conn.id}:${s}`,
+              label: `${deviceLabel(s)}${all.length > 1 ? ` (${conn.name})` : ''}`,
+            }));
+        }),
+      );
+      return {
+        services: results.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])),
+        errors: results.flatMap((r) =>
+          r.status === 'rejected'
+            ? [r.reason instanceof Error ? r.reason.message : String(r.reason)]
+            : [],
+        ),
+      };
+    },
+
     /** Kamera-Entities aller Standorte; nicht erreichbare Standorte stehen in errors */
     async cameras(): Promise<HaCameraList> {
       const all = connections();
@@ -389,6 +434,16 @@ export function createHaClient(db: Db, fetchImpl: typeof fetch = fetch, supervis
 }
 
 export type HaClient = ReturnType<typeof createHaClient>;
+
+/** „mobile_app_galaxy_s25“ → „Galaxy S25“ */
+export function deviceLabel(service: string) {
+  return service
+    .replace(/^mobile_app_/, '')
+    .split('_')
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(' ');
+}
 
 /** Grund für die Fehlermeldung, wenn fetch scheitert */
 export const unreachable = (e: unknown) =>

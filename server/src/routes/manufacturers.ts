@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { schema, type Db } from '../db/index.js';
 import { parseId } from './crud.js';
 
-const { manufacturers, filamentSpools, filamentProducts } = schema;
+const { manufacturers, filamentSpools, filamentProducts, spareParts } = schema;
 
 const badRequest = (message: string) => Object.assign(new Error(message), { statusCode: 400 });
 
@@ -86,7 +86,7 @@ export function registerManufacturerRoutes(app: FastifyInstance, db: Db) {
     return reply.code(201).send(db.insert(manufacturers).values({ name }).returning().get());
   });
 
-  /** Umbenennen ändert auch die Spulen und gemerkten Sorten mit dem alten Namen */
+  /** Umbenennen ändert auch die Spulen, gemerkten Sorten und Ersatzteile mit dem alten Namen */
   app.put<{ Params: { id: string } }>('/manufacturers/:id', (req, reply) => {
     const id = parseId(req.params.id);
     const name = parseName(req.body);
@@ -99,7 +99,7 @@ export function registerManufacturerRoutes(app: FastifyInstance, db: Db) {
       .get();
     if (other) return reply.code(409).send({ error: 'Diesen Hersteller gibt es schon.' });
     return db.transaction((tx) => {
-      for (const table of [filamentSpools, filamentProducts])
+      for (const table of [filamentSpools, filamentProducts, spareParts])
         tx.update(table)
           .set({ manufacturer: name })
           .where(sql`lower(trim(${table.manufacturer})) = lower(${current.name})`)
@@ -125,6 +125,15 @@ export function registerManufacturerRoutes(app: FastifyInstance, db: Db) {
     if (used)
       return reply.code(409).send({
         error: `${current.name} wird noch von ${used} ${used === 1 ? 'Spule' : 'Spulen'} verwendet.`,
+      });
+    const parts = db
+      .select({ id: spareParts.id })
+      .from(spareParts)
+      .where(sql`lower(trim(${spareParts.manufacturer})) = lower(${current.name})`)
+      .all().length;
+    if (parts)
+      return reply.code(409).send({
+        error: `${current.name} wird noch von ${parts} ${parts === 1 ? 'Ersatzteil' : 'Ersatzteilen'} verwendet.`,
       });
     db.delete(manufacturers).where(eq(manufacturers.id, id)).run();
     return reply.code(204).send();

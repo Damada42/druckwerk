@@ -1,6 +1,7 @@
 import {
   DEFAULT_SETTINGS,
   LOW_STOCK_GROUP_LABELS,
+  parseNotifyTarget,
   storageSubtree,
   type AppSettings,
 } from '@3dapp/shared';
@@ -33,6 +34,10 @@ export function registerStorageRoutes(app: FastifyInstance, db: Db) {
       if (typeof value !== typeof DEFAULT_SETTINGS[key as keyof AppSettings])
         return reply.code(400).send({ error: `Ungültiger Wert für ${key}` });
       if (key === 'lowStockGroup' && !Object.hasOwn(LOW_STOCK_GROUP_LABELS, value as string))
+        return reply.code(400).send({ error: `Ungültiger Wert für ${key}` });
+      if (typeof value === 'number' && (!Number.isFinite(value) || value < 0))
+        return reply.code(400).send({ error: `Ungültiger Wert für ${key}` });
+      if (key === 'maintenanceNotify' && value !== '' && !parseNotifyTarget(value as string))
         return reply.code(400).send({ error: `Ungültiger Wert für ${key}` });
       db.insert(settings)
         .values({ key, value: JSON.stringify(value) })

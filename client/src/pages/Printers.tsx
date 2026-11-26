@@ -11,6 +11,7 @@ import { useHaStatus, useList } from '../api';
 import { EntityForm, type FieldDef } from '../components/EntityForm';
 import { CameraDialog, PrinterCameras } from '../components/PrinterCameras';
 import { PrinterLivePanel } from '../components/PrinterLive';
+import { PrinterMaintenance } from '../components/PrinterMaintenance';
 import { Badge, Button, Card, Empty, PageHeader, cx, euro } from '../components/ui';
 
 const hasCostData = (p: Printer) =>
@@ -252,6 +253,7 @@ export function PrintersPage() {
               </dl>
               <PrinterCameras printer={p} />
               <PrinterLivePanel printer={p} />
+              <PrinterMaintenance printer={p} />
             </Card>
           );
         })}

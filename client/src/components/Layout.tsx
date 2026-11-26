@@ -8,6 +8,7 @@ import {
   Settings,
   Users,
   Warehouse,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react';
 import type { AppSettings } from '@3dapp/shared';
@@ -51,6 +52,13 @@ export const NAV_ITEMS: NavItem[] = [
   },
   { to: '/drucker', label: 'Drucker', icon: Printer, description: 'Deine Drucker' },
   {
+    to: '/ersatzteile',
+    label: 'Ersatzteile',
+    icon: Wrench,
+    description: 'Teile & Lagerbestand',
+    feature: 'maintenance',
+  },
+  {
     to: '/einstellungen',
     label: 'Einstellungen',
     icon: Settings,
@@ -59,7 +67,7 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 /** Auf dem Handy passen nicht alle Punkte in die untere Leiste – diese stehen unter „Mehr“ */
-const MORE_ON_MOBILE = new Set(['/einstellungen', '/personen', '/lager']);
+const MORE_ON_MOBILE = new Set(['/einstellungen', '/personen', '/lager', '/ersatzteile']);
 
 export function Layout() {
   const navItems = useNavItems();

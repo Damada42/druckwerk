@@ -342,6 +342,15 @@
     "v": null
   },
   {
+    "a": { "unit_of_measurement": "h" },
+    "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
+    "e": "sensor.the_one_gesamtnutzung",
+    "m": "P1S",
+    "n": "the_one",
+    "s": "1752.96",
+    "v": null
+  },
+  {
     "a": {},
     "d": "671ed8fd7336dc7aba6d6faa4470f6e6",
     "e": "sensor.the_one_aktiver_slot",

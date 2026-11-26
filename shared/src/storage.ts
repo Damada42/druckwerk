@@ -18,12 +18,38 @@ export interface AppSettings {
   storageLocations: boolean;
   /** „Filament wird knapp“: je Hersteller und Farbe oder nur je Farbe zusammenzählen */
   lowStockGroup: LowStockGroup;
+  /** Ersatzteile und Wartungsplan der Drucker */
+  maintenance: boolean;
+  /** Vorwarnung: so viele Betriebsstunden vor dem Intervall gilt ein Punkt als „bald fällig“ */
+  maintenanceWarnHours: number;
+  /** Vorwarnung bei Intervallen in Monaten, in Tagen */
+  maintenanceWarnDays: number;
+  /** Push über Home Assistant: „<Verbindungs-ID>:mobile_app_xyz“; leer = keine Nachricht */
+  maintenanceNotify: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   storageLocations: false,
   lowStockGroup: 'manufacturer',
+  maintenance: false,
+  maintenanceWarnHours: 300,
+  maintenanceWarnDays: 14,
+  maintenanceNotify: '',
 };
+
+/** Push-Ziel aus maintenanceNotify zerlegen */
+export function parseNotifyTarget(value: string): { connectionId: number; service: string } | null {
+  const m = /^(\d+):([a-z0-9_]+)$/.exec(value);
+  return m ? { connectionId: Number(m[1]), service: m[2] } : null;
+}
+
+/** Ein Benachrichtigungsdienst der Companion App in Home Assistant */
+export interface NotifyService {
+  /** Wert für maintenanceNotify */
+  value: string;
+  /** z.B. „Galaxy S25+ (Home Assistant)“ */
+  label: string;
+}
 
 const byPosition = (a: StorageLocation, b: StorageLocation) =>
   a.position - b.position || a.id - b.id;

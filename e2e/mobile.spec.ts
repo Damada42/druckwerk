@@ -151,3 +151,19 @@ test('Handy: Kostenvergleich passt ohne seitliches Scrollen', async ({ page }) =
   await total.scrollIntoViewIfNeeded();
   await expect(total).toBeInViewport({ ratio: 1 });
 });
+
+test('Handy: Ersatzteile und Wartung ohne seitliches Scrollen', async ({ page, request }) => {
+  await request.put('/api/settings', { data: { maintenance: true } });
+  await page.goto('/');
+  const bottomNav = page.locator('nav').last();
+  await bottomNav.getByRole('button', { name: 'Mehr' }).click();
+  await page.getByRole('menuitem', { name: 'Ersatzteile' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Ersatzteile' })).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await page.goto('/drucker');
+  await expect(page.getByRole('button', { name: 'Wartung erledigt' }).first()).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Wartung fällig' })).toBeVisible();
+  await expectNoHorizontalScroll(page);
+});

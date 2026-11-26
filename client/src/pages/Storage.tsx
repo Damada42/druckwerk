@@ -3,9 +3,10 @@ import {
   storageSubtree,
   storageTree,
   type FilamentSpool,
+  type SparePart,
   type StorageLocation,
 } from '@3dapp/shared';
-import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2, Wrench, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useList, useSave, useSettings, useStorageOrder } from '../api';
@@ -30,6 +31,9 @@ export function StoragePage() {
   const { data: settings } = useSettings();
   const { data: locations = [], isLoading } = useList('storage-locations');
   const { data: spools = [] } = useList('spools');
+  const { data: allParts = [] } = useList('spare-parts', !!settings?.maintenance);
+  // Ersatzteile nur mit eingeschalteter Wartung
+  const parts = settings?.maintenance ? allParts : [];
   const [editing, setEditing] = useState<Editing>(null);
 
   if (settings && !settings.storageLocations) {
@@ -50,6 +54,7 @@ export function StoragePage() {
   const top = storageChildren(locations, null);
   const unplaced = spools.filter((s) => s.storageLocationId === null);
   const placed = spools.length - unplaced.length;
+  const unplacedParts = parts.filter((p) => p.storageLocationId === null);
 
   return (
     <>
@@ -89,6 +94,7 @@ export function StoragePage() {
                 depth={0}
                 locations={locations}
                 spools={spools}
+                parts={parts}
                 editing={editing}
                 setEditing={setEditing}
               />
@@ -97,7 +103,7 @@ export function StoragePage() {
         ))}
       </div>
 
-      {unplaced.length > 0 && locations.length > 0 && (
+      {(unplaced.length > 0 || unplacedParts.length > 0) && locations.length > 0 && (
         <Card className="mt-6 overflow-hidden" aria-label="Ohne Lagerplatz">
           <header className="border-b border-line bg-surface-2 px-4 py-3">
             <h2 className="font-semibold">Ohne Lagerplatz</h2>
@@ -106,6 +112,9 @@ export function StoragePage() {
           <ul className="divide-y divide-[var(--border)]">
             {unplaced.map((s) => (
               <SpoolPlaceRow key={s.id} spool={s} locations={locations} />
+            ))}
+            {unplacedParts.map((p) => (
+              <PartPlaceRow key={`part-${p.id}`} part={p} locations={locations} />
             ))}
           </ul>
         </Card>
@@ -119,6 +128,7 @@ function PlaceNode({
   depth,
   locations,
   spools,
+  parts,
   editing,
   setEditing,
 }: {
@@ -126,6 +136,7 @@ function PlaceNode({
   depth: number;
   locations: StorageLocation[];
   spools: FilamentSpool[];
+  parts: SparePart[];
   editing: Editing;
   setEditing: (e: Editing) => void;
 }) {
@@ -139,6 +150,10 @@ function PlaceNode({
     (s) => s.storageLocationId !== null && subtree.has(s.storageLocationId),
   );
   const here = spools.filter((s) => s.storageLocationId === l.id);
+  const partsInside = parts.filter(
+    (p) => p.storageLocationId !== null && subtree.has(p.storageLocationId),
+  );
+  const partsHere = parts.filter((p) => p.storageLocationId === l.id);
   const renaming = editing?.kind === 'rename' && editing.id === l.id;
   const adding = editing?.kind === 'add' && editing.parentId === l.id;
 
@@ -183,6 +198,8 @@ function PlaceNode({
                 {inside.length} {inside.length === 1 ? 'Spule' : 'Spulen'}
                 {inside.length > 0 &&
                   ` · ${grams(inside.reduce((sum, s) => sum + s.weightRemainingG, 0))}`}
+                {partsInside.length > 0 &&
+                  ` · ${partsInside.length} ${partsInside.length === 1 ? 'Ersatzteil' : 'Ersatzteile'}`}
               </span>
             </div>
             <div className="flex">
@@ -221,10 +238,13 @@ function PlaceNode({
       </div>
       <ErrorText error={remove.error ?? order.error} />
 
-      {here.length > 0 && (
+      {here.length + partsHere.length > 0 && (
         <ul className="pb-2" style={{ paddingLeft: depth * 20 }}>
           {here.map((s) => (
             <SpoolPlaceRow key={s.id} spool={s} locations={locations} />
+          ))}
+          {partsHere.map((p) => (
+            <PartPlaceRow key={`part-${p.id}`} part={p} locations={locations} />
           ))}
         </ul>
       )}
@@ -248,6 +268,7 @@ function PlaceNode({
               depth={depth + 1}
               locations={locations}
               spools={spools}
+              parts={parts}
               editing={editing}
               setEditing={setEditing}
             />
@@ -353,6 +374,34 @@ function SpoolPlaceRow({
         locations={locations}
         value={s.storageLocationId}
         onChange={(storageLocationId) => save.mutate({ id: s.id, storageLocationId })}
+      />
+      <ErrorText error={save.error} />
+    </li>
+  );
+}
+
+/** Ersatzteil mit Bestand und Auswahl des Lagerplatzes */
+function PartPlaceRow({ part: p, locations }: { part: SparePart; locations: StorageLocation[] }) {
+  const { save } = useSave('spare-parts');
+  const low = p.minStock > 0 && p.stockQty < p.minStock;
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 text-sm">
+      <Wrench size={16} className="shrink-0 text-muted" />
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium">
+          {p.name}
+          {p.manufacturer && <span className="font-normal text-muted"> · {p.manufacturer}</span>}
+        </div>
+        <div className={cx('text-xs', low ? 'font-medium text-red-600' : 'text-muted')}>
+          {p.stockQty} Stück auf Lager{low && ` (min. ${p.minStock})`}
+        </div>
+      </div>
+      <StorageSelect
+        className="w-full sm:w-64"
+        aria-label={`Lagerplatz für ${p.name}`}
+        locations={locations}
+        value={p.storageLocationId}
+        onChange={(storageLocationId) => save.mutate({ id: p.id, storageLocationId })}
       />
       <ErrorText error={save.error} />
     </li>

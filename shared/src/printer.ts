@@ -130,6 +130,8 @@ export interface PrinterLive {
   /** Stand des Plattenbilds mit markierten Teilen, null = keins */
   plateVersion: string | null;
   ams: AmsSlot[];
+  /** Betriebsstunden laut Drucker (Bambu „Gesamtnutzung“, Klipper Gesamtdruckzeit); null = keine */
+  totalHours: number | null;
 }
 
 export const PRINT_SPEEDS = ['silent', 'standard', 'sport', 'ludicrous'] as const;
@@ -178,6 +180,7 @@ const ROLES = {
   objects: ['sensor', ['druckbare_objekte', 'printable_objects']],
   skipped: ['sensor', ['ubersprungene_objekte', 'skipped_objects']],
   plate: ['image', ['bild_wahlen', 'pick_image']],
+  totalHours: ['sensor', ['gesamtnutzung', 'total_usage', 'total_usage_hours']],
 } as const satisfies Record<string, readonly [string, readonly string[]]>;
 
 export type PrinterRole = keyof typeof ROLES;
@@ -206,6 +209,7 @@ const KLIPPER_ROLES = {
   resume: ['button', ['resume_print']],
   stop: ['button', ['cancel_print']],
   speed: ['number', ['speed_factor']],
+  totalHours: ['sensor', ['totals_print_time']],
 } as const satisfies Record<string, readonly [string, readonly string[]]>;
 
 export type KlipperRole = keyof typeof KLIPPER_ROLES;
@@ -345,6 +349,29 @@ function minutes(entity: HaEntity | undefined): number | null {
   return Math.round(unit === 'h' ? n * 60 : unit === 's' ? n / 60 : n);
 }
 
+/**
+ * Betriebsstunden aus einem Sensor: Zahl mit Einheit h (Standard), min oder s, oder Klippers
+ * Text „168h 59m 40s“
+ */
+export function parseHours(entity: Pick<HaEntity, 'state' | 'attributes'> | undefined) {
+  const state = entity?.state?.trim();
+  if (!state || UNSET.has(state)) return null;
+  const parts =
+    /^(?:(\d+(?:\.\d+)?)\s*d)?\s*(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+(?:\.\d+)?)\s*m)?\s*(?:(\d+(?:\.\d+)?)\s*s)?$/i.exec(
+      state,
+    );
+  if (parts && parts.slice(1).some((p) => p !== undefined)) {
+    const [d, h, m, s] = parts.slice(1).map((p) => Number(p ?? 0));
+    return round2(d * 24 + h + m / 60 + s / 3600);
+  }
+  const n = num(state);
+  if (n === null || n < 0) return null;
+  const unit = entity?.attributes.unit_of_measurement;
+  return round2(unit === 'min' ? n / 60 : unit === 's' ? n / 3600 : unit === 'd' ? n * 24 : n);
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 /** Macht aus den Home-Assistant-Entities eines Druckers einen übersichtlichen Live-Status */
 export function parsePrinterLive(entities: HaEntity[], deviceId: string): PrinterLive {
   if (printerKind(entities, deviceId) === 'klipper') return parseKlipperLive(entities, deviceId);
@@ -401,6 +428,7 @@ export function parsePrinterLive(entities: HaEntity[], deviceId: string): Printe
       (state === 'running' || state === 'pause') && objects.filter((o) => !o.skipped).length > 1,
     plateVersion: get('plate')?.attributes.entity_picture ? (text(value('plate')) ?? 'x') : null,
     ams: amsSlots(mine),
+    totalHours: parseHours(get('totalHours')),
   };
 }
 
@@ -474,6 +502,7 @@ function parseKlipperLive(entities: HaEntity[], deviceId: string): PrinterLive {
           },
         ]
       : [],
+    totalHours: parseHours(get('totalHours')),
   };
 }
 

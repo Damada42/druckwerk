@@ -3,7 +3,10 @@ import { eq, isNotNull, sql } from 'drizzle-orm';
 import type { FastifyBaseLogger } from 'fastify';
 import { schema, type Db } from '../db/index.js';
 import { spoolInSlot, type HaClient } from './client.js';
+import { checkMaintenance } from './maintenance.js';
 import { PrintTracker, type BookingPlan } from './tracker.js';
+
+const MAINTENANCE_CHECK_MS = 60_000;
 
 /**
  * Bucht den Verbrauch eines Auftrags von den Spulen ab, die in den Slots stecken. Slots ohne
@@ -70,6 +73,8 @@ export function createWatcher(db: Db, ha: HaClient, log?: FastifyBaseLogger) {
   const tracker = new PrintTracker();
   let timer: NodeJS.Timeout | undefined;
   let lastError: string | null = null;
+  let lastMaintenanceCheck = -Infinity;
+  let maintenanceEvery = MAINTENANCE_CHECK_MS;
 
   async function tick(now = Date.now()) {
     if (!ha.configured()) return;
@@ -78,7 +83,15 @@ export function createWatcher(db: Db, ha: HaClient, log?: FastifyBaseLogger) {
       .from(schema.printers)
       .where(isNotNull(schema.printers.haDeviceId))
       .all();
-    if (!linked.length) return;
+    if (linked.length) await poll(linked, now);
+    // Wartung höchstens einmal pro Minute prüfen (auch Drucker ohne Home Assistant)
+    if (now - lastMaintenanceCheck >= maintenanceEvery) {
+      lastMaintenanceCheck = now;
+      await checkMaintenance(db, ha, new Date(now), log);
+    }
+  }
+
+  async function poll(linked: (typeof schema.printers.$inferSelect)[], now: number) {
     const { entities, errors } = await ha.entities({ fresh: true });
     // Ein nicht erreichbarer Standort stört die anderen nicht; nur bei neuer Ursache loggen
     const message = errors.map((e) => e.message).join(' ') || null;
@@ -86,6 +99,15 @@ export function createWatcher(db: Db, ha: HaClient, log?: FastifyBaseLogger) {
     lastError = message;
     for (const printer of linked) {
       const live = parsePrinterLive(entities, printer.haDeviceId!);
+      // Betriebsstunden übernehmen; ist der Drucker aus („unavailable“), bleibt der letzte Wert
+      if (
+        live.totalHours !== null &&
+        (live.totalHours !== printer.operatingHours || !printer.operatingHoursAt)
+      )
+        db.update(schema.printers)
+          .set({ operatingHours: live.totalHours, operatingHoursAt: new Date(now).toISOString() })
+          .where(eq(schema.printers.id, printer.id))
+          .run();
       const plan = tracker.observe(`printer-${printer.id}`, live, now);
       if (!plan) continue;
       const booked = bookPlan(db, printer.id, plan, log);
@@ -102,6 +124,8 @@ export function createWatcher(db: Db, ha: HaClient, log?: FastifyBaseLogger) {
     tick,
     tracker,
     start(intervalMs: number) {
+      // Kurze Abfrage-Intervalle (Klick-Tests) prüfen auch die Wartung öfter
+      maintenanceEvery = Math.min(MAINTENANCE_CHECK_MS, intervalMs * 3);
       const run = () =>
         tick().catch((e: Error) => {
           if (e.message !== lastError) log?.warn(`Home Assistant: ${e.message}`);

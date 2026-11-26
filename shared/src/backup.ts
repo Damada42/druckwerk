@@ -30,7 +30,7 @@ export const BACKUP_GROUP_HINTS: Record<BackupGroup, string> = {
   team: 'Personen im Team',
   filament: 'Spulen, Typen, Hersteller, Finishes, gemerkte Barcodes, Abbuchungen',
   storage: 'Lagerplätze',
-  printers: 'mit Kameras und Home-Assistant-Verbindungen',
+  printers: 'mit Kameras, Home-Assistant-Verbindungen, Ersatzteilen und Wartung',
   company: 'Firmenprofil für Angebote und Rechnungen, Logo',
   settings: 'Schalter, Mindestmengen-Gruppierung, Kostenkategorien',
 };

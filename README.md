@@ -1,7 +1,8 @@
 # Druckwerk – 3D-Druck-Manager
 
 Web-App (PWA) zum Verwalten von 3D-Druck-Projekten: Kanban-Board, Kunden, Team, Filament-Bestand mit
-Barcode-Scan, Rechnungen, Angebote als PDF und Drucker mit Live-Status über Home Assistant. PC und Handy
+Barcode-Scan, Rechnungen, Angebote als PDF, Drucker mit Live-Status über Home Assistant sowie
+Ersatzteile und Wartungsplan. PC und Handy
 greifen auf dieselben Daten zu.
 
 Druckwerk lässt sich auf drei Arten betreiben – es ist immer dasselbe Programm (dasselbe Docker-Image):
@@ -266,3 +267,26 @@ Geschwindigkeit lässt sich in Prozent ändern. Statt der AMS-Slots gibt es eine
 Spule im Drucker. Nach jedem Druck rechnet die App die verbrauchte Länge über Durchmesser und Material
 in Gramm um und bucht sie von dieser Spule ab. Teile überspringen bietet die Moonraker-Integration nicht
 an.
+
+**Ersatzteile & Wartung:** Unter „Einstellungen → Ersatzteile & Wartung“ einschaltbar.
+
+- **Ersatzteile** (eigene Seite, am Handy unter „Mehr“): Name, Hersteller aus der Herstellerliste,
+  Artikelnummer, passendes Modell, Shop-Link, Preis, Lagerbestand mit +/− und Mindestbestand. Mit
+  eingeschalteten Lagerplätzen hat jedes Teil seinen Platz und erscheint auch auf der Lager-Seite.
+- **Wartungsplan je Drucker** (auf der Druckerkarte): Punkte zum Tauschen, Reinigen, Schmieren oder
+  Prüfen mit Intervall in Betriebsstunden und/oder Monaten. Fällig ist, was zuerst erreicht wird. Ein
+  neuer Punkt startet bei 0 h; der aktuelle Stand lässt sich eintragen.
+- **Betriebsstunden:** Bei verknüpften Bambu-Druckern kommen sie aus dem Sensor „Gesamtnutzung“, bei
+  Klipper aus der Gesamtdruckzeit von Moonraker. Ist der Drucker aus, bleibt der letzte Wert. Ohne
+  Home Assistant trägst du die Stunden auf der Druckerkarte selbst ein.
+- **Vorwarnung:** Standard 300 Betriebsstunden bzw. 14 Tage vorher, in den Einstellungen und je Punkt
+  änderbar. Die Übersicht zeigt „Wartung fällig“ mit den benötigten Teilen samt Lagerstand und knappe
+  Ersatzteile. Optional schickt Druckwerk je Stufe („bald fällig“, „fällig“) eine Push-Nachricht über
+  die Companion App (Gerät in den Einstellungen wählen, „Test senden“ prüft es).
+- **Wartung erledigt:** Setzt die gewählten Zähler zurück (fällige sind vorausgewählt), bucht getauschte
+  Teile vom Lager ab und schreibt ins Wartungsprotokoll. Die letzte Wartung lässt sich rückgängig machen.
+- **Vorlage P1S/P1P:** nach Bambus Wartungsempfehlung im Wiki (P1-Serie). Feste Intervalle nennt Bambu
+  nur in Monaten (Kohlenstoffstangen und Linearwellen monatlich reinigen, Z-Spindeln und Rostschutz alle
+  drei Monate); diese Punkte sind vorausgewählt. Für Punkte nach Rollen Filament oder Zustand
+  (Schneidklinge, PTFE-Schlauch, Düsenwischer, Hotend …) zeigt der Dialog Bambus Hinweis, das Intervall
+  trägst du selbst ein. Die Shop-Links sind die aus dem Wiki.

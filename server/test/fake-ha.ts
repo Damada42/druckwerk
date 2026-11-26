@@ -200,6 +200,18 @@ export class FakeHa {
       };
     if (method === 'POST' && path === '/api/template')
       return { status: 200, type: 'text/plain', body: JSON.stringify(this.entities) };
+    if (method === 'GET' && path === '/api/services')
+      return {
+        status: 200,
+        type: 'application/json',
+        body: JSON.stringify([
+          { domain: 'light', services: { turn_on: {}, turn_off: {} } },
+          {
+            domain: 'notify',
+            services: { notify: {}, mobile_app_galaxy_s25: {}, persistent_notification: {} },
+          },
+        ]),
+      };
     const service = /^\/api\/services\/(\w+)\/(\w+)$/.exec(path);
     if (method === 'POST' && service) {
       const data = JSON.parse(body) as Record<string, unknown>;
@@ -259,6 +271,12 @@ export class FakeHa {
         }
         if (req.method === 'POST' && url.pathname === '/test/klipper') {
           this.klipperPrint(...(JSON.parse(body) as Parameters<FakeHa['klipperPrint']>));
+          res.writeHead(204).end();
+          return;
+        }
+        // Zustand einer Entity setzen: [entityId, state]
+        if (req.method === 'POST' && url.pathname === '/test/set') {
+          this.set(...(JSON.parse(body) as [string, string]));
           res.writeHead(204).end();
           return;
         }

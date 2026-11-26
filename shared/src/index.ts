@@ -163,6 +163,10 @@ export interface Printer {
   lifetimeHours: number | null;
   maintenancePerYear: number | null;
   hoursPerYear: number | null;
+  /** Betriebsstunden laut Drucker (aus Home Assistant) bzw. von Hand eingetragen */
+  operatingHours: number;
+  /** Zuletzt aus Home Assistant übernommen; null = von Hand gepflegt */
+  operatingHoursAt: string | null;
   createdAt: string;
 }
 
@@ -307,6 +311,7 @@ export * from './camera';
 export * from './document';
 export * from './invoice';
 export * from './label';
+export * from './maintenance';
 export * from './printer';
 export * from './slotMatch';
 export * from './stock';

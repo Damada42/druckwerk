@@ -50,7 +50,14 @@ export const GROUP_TABLES: Record<BackupGroup, TablePart[]> = {
     { table: 'filament_bookings' },
   ],
   storage: [{ table: 'storage_locations' }],
-  printers: [{ table: 'printers' }, { table: 'printer_cameras' }, { table: 'ha_connections' }],
+  printers: [
+    { table: 'printers' },
+    { table: 'printer_cameras' },
+    { table: 'ha_connections' },
+    { table: 'spare_parts' },
+    { table: 'maintenance_tasks' },
+    { table: 'maintenance_log' },
+  ],
   company: [{ table: 'settings', where: `"key" = 'company'` }],
   settings: [{ table: 'settings', where: `"key" <> 'company'` }, { table: 'cost_categories' }],
 };

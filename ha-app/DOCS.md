@@ -1,8 +1,8 @@
 # Druckwerk
 
 3D-Druck-Manager direkt in Home Assistant: Projekt-Kanban, Kunden, Team, Filament-Bestand mit
-Barcode-Scan, Rechnungen und Drucker mit Live-Status, Steuerung, Kameras und automatischer
-Filament-Abbuchung.
+Barcode-Scan, Rechnungen und Drucker mit Live-Status, Steuerung, Kameras, automatischer
+Filament-Abbuchung sowie Ersatzteilen und Wartungsplan.
 
 ## Installation
 
@@ -18,6 +18,10 @@ Drucker kommen aus den Integrationen „Bambu Lab“ (mit bis zu vier AMS) und �
 Die Verbindung zu diesem Home Assistant besteht automatisch (Einstellungen in Druckwerk zeigen
 „Dieses Home Assistant (App)“) – kein Token nötig. Weitere Home-Assistant-Instanzen, z.B. in der
 Werkstatt, lassen sich wie gewohnt mit Adresse und langlebigem Zugriffstoken hinzufügen.
+
+Mit eingeschalteter Wartung (Einstellungen → Ersatzteile & Wartung) übernimmt Druckwerk die
+Betriebsstunden der Drucker aus Home Assistant und kann über die Companion App eine Push-Nachricht
+schicken, wenn eine Wartung bald fällig ist.
 
 ## Daten
 

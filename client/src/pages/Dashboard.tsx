@@ -3,6 +3,7 @@ import { ArrowRight, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useList, useSettings, useStats } from '../api';
 import { useNavItems } from '../components/Layout';
+import { MaintenanceDueCard } from '../components/MaintenanceDue';
 import { PrinterLiveSummary } from '../components/PrinterLive';
 import { Badge, Card, ColorDot, PageHeader, dateDe, grams } from '../components/ui';
 
@@ -24,6 +25,7 @@ export function DashboardPage() {
   const { data: types = [] } = useList('filament-types');
   const { data: finishes = [] } = useList('finishes');
   const { data: settings } = useSettings();
+  const { data: parts = [] } = useList('spare-parts', !!settings?.maintenance);
 
   const active = projects.filter((p) => p.status === 'in_progress').slice(0, 5);
   const byColor = settings?.lowStockGroup === 'color';
@@ -40,6 +42,7 @@ export function DashboardPage() {
       ? `${stats.spools} ${stats.spools === 1 ? 'Spule' : 'Spulen'} · ${grams(stats.filamentTotalG)}`
       : '',
     '/drucker': stats ? `${stats.printers} Drucker` : '',
+    '/ersatzteile': `${parts.length} ${parts.length === 1 ? 'Teil' : 'Teile'}`,
     '/einstellungen': 'Stammdaten',
   };
 
@@ -169,6 +172,8 @@ export function DashboardPage() {
             </div>
           )}
         </Card>
+
+        <MaintenanceDueCard />
       </div>
     </>
   );

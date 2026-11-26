@@ -1,4 +1,4 @@
-import { storagePaths, type StorageLocation } from '@3dapp/shared';
+import { DEFAULT_SETTINGS, storagePaths, type StorageLocation } from '@3dapp/shared';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -28,15 +28,12 @@ const place = (name: string, parentId?: number) =>
 
 describe('Einstellungen', () => {
   it('hat die Lagerplätze anfangs aus und merkt sich den Schalter', async () => {
-    expect((await app.inject('/api/settings')).json()).toEqual({
-      storageLocations: false,
-      lowStockGroup: 'manufacturer',
-    });
+    expect((await app.inject('/api/settings')).json()).toEqual(DEFAULT_SETTINGS);
     const res = await send('PUT', '/api/settings', { storageLocations: true, fremd: 1 });
-    expect(res.body).toEqual({ storageLocations: true, lowStockGroup: 'manufacturer' });
+    expect(res.body).toEqual({ ...DEFAULT_SETTINGS, storageLocations: true });
     expect((await app.inject('/api/settings')).json()).toEqual({
+      ...DEFAULT_SETTINGS,
       storageLocations: true,
-      lowStockGroup: 'manufacturer',
     });
     expect((await send('PUT', '/api/settings', { storageLocations: 'ja' })).status).toBe(400);
   });

@@ -22,6 +22,7 @@ import { registerStorageRoutes } from './routes/storage.js';
 import { registerDocumentRoutes } from './routes/documents.js';
 import { registerCostCategoryRoutes } from './routes/costCategories.js';
 import { registerBackupRoutes } from './routes/backup.js';
+import { registerMaintenanceRoutes } from './routes/maintenance.js';
 import {
   canonicalManufacturer,
   parseMinStock,
@@ -158,7 +159,14 @@ export async function buildApp(options: AppOptions) {
       });
       registerManufacturerRoutes(api, db);
       registerCrud(api, db, '/finishes', schema.finishes, { required: ['name'] });
-      registerCrud(api, db, '/printers', schema.printers, { required: ['name', 'model'] });
+      registerCrud(api, db, '/printers', schema.printers, {
+        required: ['name', 'model'],
+        // Betriebsstunden nur über /printers/:id/hours bzw. aus Home Assistant
+        beforeCreate: ({ operatingHoursAt: _at, ...data }) => data,
+        beforeUpdate: ({ operatingHours: _h, operatingHoursAt: _at, ...data }) =>
+          // Ohne Home Assistant sind die Stunden wieder von Hand änderbar
+          'haDeviceId' in data && !data.haDeviceId ? { ...data, operatingHoursAt: null } : data,
+      });
       registerCrud(api, db, '/spools', schema.filamentSpools, {
         required: ['typeId', 'manufacturer', 'colorName'],
         // Die AMS-Zuordnung setzen nur /ams-link und /ams-import – sonst hätte z.B. eine kopierte
@@ -253,6 +261,7 @@ export async function buildApp(options: AppOptions) {
       registerStorageRoutes(api, db);
       registerDocumentRoutes(api, db, options.uploadDir);
       registerCostCategoryRoutes(api, db);
+      registerMaintenanceRoutes(api, db, ha);
       registerBackupRoutes(api, db, {
         uploadDir: options.uploadDir,
         // Sicherheitskopie vor einem Import neben der Datenbank (data/backup)

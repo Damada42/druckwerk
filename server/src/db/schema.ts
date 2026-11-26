@@ -12,6 +12,9 @@ import type {
   DocumentItem,
   DocumentKind,
   InvoiceType,
+  MaintenanceKind,
+  MaintenanceLevel,
+  MaintenanceLogItem,
   MemberRole,
   Priority,
   ProjectStatus,
@@ -129,6 +132,64 @@ export const printers = sqliteTable('printers', {
   lifetimeHours: real('lifetime_hours'),
   maintenancePerYear: real('maintenance_per_year'),
   hoursPerYear: real('hours_per_year'),
+  /** Betriebsstunden laut Drucker (aus Home Assistant) bzw. von Hand eingetragen */
+  operatingHours: real('operating_hours').notNull().default(0),
+  /** Zuletzt aus Home Assistant übernommen; null = von Hand gepflegt */
+  operatingHoursAt: text('operating_hours_at'),
+  createdAt: createdAt(),
+});
+
+/** Ersatzteile mit Lagerbestand */
+export const spareParts = sqliteTable('spare_parts', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  manufacturer: text('manufacturer'),
+  partNumber: text('part_number'),
+  shopUrl: text('shop_url'),
+  price: real('price'),
+  stockQty: integer('stock_qty').notNull().default(0),
+  minStock: integer('min_stock').notNull().default(0),
+  storageLocationId: integer('storage_location_id').references(() => storageLocations.id, {
+    onDelete: 'set null',
+  }),
+  printerModel: text('printer_model'),
+  notes: text('notes'),
+  createdAt: createdAt(),
+});
+
+/** Wartungspunkte je Drucker: Intervall in Betriebsstunden und/oder Monaten */
+export const maintenanceTasks = sqliteTable('maintenance_tasks', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  printerId: integer('printer_id')
+    .notNull()
+    .references(() => printers.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  kind: text('kind').$type<MaintenanceKind>().notNull().default('replace'),
+  partId: integer('part_id').references(() => spareParts.id, { onDelete: 'set null' }),
+  partQty: integer('part_qty').notNull().default(1),
+  intervalHours: real('interval_hours'),
+  intervalMonths: real('interval_months'),
+  warnHours: real('warn_hours'),
+  /** Betriebsstunden des Druckers beim letzten Zurücksetzen */
+  baseHours: real('base_hours').notNull().default(0),
+  lastDoneAt: text('last_done_at'),
+  /** Bis zu welcher Stufe schon eine Push-Nachricht verschickt wurde */
+  notifiedLevel: text('notified_level').$type<MaintenanceLevel>(),
+  notes: text('notes'),
+  position: integer('position').notNull().default(0),
+  createdAt: createdAt(),
+});
+
+/** Erledigte Wartungen mit den Punkten und ihrem Stand davor (für Rückgängig) */
+export const maintenanceLog = sqliteTable('maintenance_log', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  printerId: integer('printer_id')
+    .notNull()
+    .references(() => printers.id, { onDelete: 'cascade' }),
+  doneAt: text('done_at').notNull(),
+  printerHours: real('printer_hours').notNull(),
+  note: text('note'),
+  items: text('items', { mode: 'json' }).$type<MaintenanceLogItem[]>().notNull(),
   createdAt: createdAt(),
 });
 

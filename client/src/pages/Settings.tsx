@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CompanyCard } from '../components/CompanyCard';
 import { CostCategoriesCard } from '../components/CostCategoriesCard';
+import { MaintenanceCard } from '../components/MaintenanceSettings';
 import {
   BackupCard,
   FilamentTypesCard,
@@ -34,7 +35,7 @@ export function SettingsPage() {
     <>
       <PageHeader
         title="Einstellungen"
-        subtitle="Stammdaten, Firmendaten für Angebote und Rechnungen, Lagerplätze, Home Assistant und Backup."
+        subtitle="Stammdaten, Firmendaten für Angebote und Rechnungen, Lagerplätze, Wartung, Home Assistant und Backup."
       />
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <FilamentTypesCard />
@@ -47,6 +48,7 @@ export function SettingsPage() {
       <CostCategoriesCard />
       <CompanyCard />
       <StorageCard />
+      <MaintenanceCard />
       <HomeAssistantCard />
       <BackupCard />
     </>

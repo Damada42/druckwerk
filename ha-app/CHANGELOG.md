@@ -1,5 +1,21 @@
 # Änderungen
 
+## 0.9.0
+
+- Neu: **Ersatzteile & Wartung** (unter Einstellungen einschalten). Ersatzteile mit Hersteller,
+  Artikelnummer, Shop-Link, Preis, Lagerbestand und Mindestbestand – auch im Lager an ihrem Platz.
+- Jeder Drucker bekommt einen Wartungsplan: Punkte zum Tauschen, Reinigen, Schmieren oder Prüfen,
+  fällig nach Betriebsstunden und/oder Monaten. Die Betriebsstunden kommen bei Bambu-Druckern aus
+  „Gesamtnutzung“, bei Klipper aus der Gesamtdruckzeit; ohne Home Assistant trägst du sie selbst ein.
+- Vorwarnung (Standard 300 h bzw. 14 Tage vorher) auf der Druckerkarte und in der Übersicht unter
+  „Wartung fällig“, mit den benötigten Teilen und ihrem Lagerstand.
+- „Wartung erledigt“ setzt die Zähler zurück, bucht getauschte Teile vom Lager ab und schreibt ins
+  Wartungsprotokoll; die letzte Wartung lässt sich rückgängig machen.
+- Für P1S/P1P gibt es eine Vorlage nach Bambus Wartungsempfehlung: Stangen monatlich reinigen,
+  Z-Spindeln alle drei Monate fetten usw. Punkte, die Bambu nach Rollen oder Zustand empfiehlt
+  (Schneidklinge, PTFE-Schlauch, Hotend …), bekommen beim Übernehmen dein eigenes Intervall.
+- Optional eine Push-Nachricht über die Companion App, wenn eine Wartung bald bzw. jetzt fällig ist.
+
 ## 0.8.4
 
 - Spulen-Auswahl am AMS-Slot nennt den Lagerplatz jeder Spule, bzw. in welchem Slot sie schon steckt.

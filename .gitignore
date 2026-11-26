@@ -6,3 +6,4 @@ e2e-report/
 *.log
 .env
 .DS_Store
+externe daten/

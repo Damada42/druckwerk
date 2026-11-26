@@ -7,7 +7,13 @@ import {
   type FilamentBooking,
   type HaCameraList,
   type HaStatus,
+  type MaintenanceDoneResult,
+  type MaintenanceLogEntry,
+  type MaintenanceTask,
+  type MaintenanceTemplateItem,
+  type NotifyService,
   type PrinterCamera,
+  type SparePart,
   type PrinterCameraInput,
   type PrinterAction,
   type PrinterLiveResponse,
@@ -115,12 +121,18 @@ export interface Resources {
   'storage-locations': StorageLocation;
   'cost-categories': CostCategory;
   manufacturers: Manufacturer;
+  'spare-parts': SparePart;
+  'maintenance-tasks': MaintenanceTask;
 }
 
 export type ResourceName = keyof Resources;
 
-export function useList<R extends ResourceName>(name: R) {
-  return useQuery({ queryKey: [name], queryFn: () => api.get<Resources[R][]>(`/${name}`) });
+export function useList<R extends ResourceName>(name: R, enabled = true) {
+  return useQuery({
+    queryKey: [name],
+    queryFn: () => api.get<Resources[R][]>(`/${name}`),
+    enabled,
+  });
 }
 
 /** Anlegen/Ändern/Löschen; danach werden Liste und Dashboard neu geladen. */
@@ -137,7 +149,10 @@ export function useSave<R extends ResourceName>(name: R) {
     if (name === 'manufacturers' || name === 'filament-types')
       qc.invalidateQueries({ queryKey: ['spools'] });
     // Neue Hersteller aus einer Spule landen in der Herstellerliste
-    if (name === 'spools') qc.invalidateQueries({ queryKey: ['manufacturers'] });
+    if (name === 'spools' || name === 'spare-parts')
+      qc.invalidateQueries({ queryKey: ['manufacturers'] });
+    // Gelöschte Teile nehmen die Zuordnung der Wartungspunkte mit
+    if (name === 'spare-parts') qc.invalidateQueries({ queryKey: ['maintenance-tasks'] });
   };
   const save = useMutation({
     mutationFn: ({ id, ...data }: Partial<Input<Resources[R]>> & { id?: number }) =>
@@ -544,5 +559,69 @@ export function useConsume() {
       qc.invalidateQueries({ queryKey: ['spools'] });
       qc.invalidateQueries({ queryKey: ['stats'] });
     },
+  });
+}
+
+/** Lagerbestand eines Ersatzteils um delta Stück ändern */
+export function usePartStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, delta }: { id: number; delta: number }) =>
+      api.post<SparePart>(`/spare-parts/${id}/stock`, { delta }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['spare-parts'] }),
+  });
+}
+
+/** Wartung eines Druckers: Protokoll, erledigt melden, rückgängig, Vorlage, Betriebsstunden */
+export function useMaintenance(printerId: number, logEnabled = false) {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['maintenance-tasks'] });
+    qc.invalidateQueries({ queryKey: ['maintenance-log', printerId] });
+    qc.invalidateQueries({ queryKey: ['spare-parts'] });
+  };
+  const log = useQuery({
+    queryKey: ['maintenance-log', printerId],
+    queryFn: () => api.get<MaintenanceLogEntry[]>(`/printers/${printerId}/maintenance-log`),
+    enabled: logEnabled,
+  });
+  const done = useMutation({
+    mutationFn: (body: { taskIds: number[]; bookParts: boolean; note: string; doneAt: string }) =>
+      api.post<MaintenanceDoneResult>(`/printers/${printerId}/maintenance`, body),
+    onSuccess: invalidate,
+  });
+  const undo = useMutation({
+    mutationFn: (id: number) => api.del(`/maintenance-log/${id}`),
+    onSuccess: invalidate,
+  });
+  const template = useMutation({
+    mutationFn: (items: MaintenanceTemplateItem[]) =>
+      api.post<MaintenanceTask[]>(`/printers/${printerId}/maintenance-tasks`, { items }),
+    onSuccess: () => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: ['manufacturers'] });
+    },
+  });
+  const hours = useMutation({
+    mutationFn: (value: number) =>
+      api.put<Printer>(`/printers/${printerId}/hours`, { hours: value }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['printers'] }),
+  });
+  return { log, done, undo, template, hours };
+}
+
+/** Benachrichtigungsdienste der Companion App – nur laden, wenn gebraucht */
+export function useNotifyServices(enabled: boolean) {
+  return useQuery({
+    queryKey: ['notify-services'],
+    queryFn: () => api.get<{ services: NotifyService[]; errors: string[] }>('/ha/notify-services'),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useTestNotify() {
+  return useMutation({
+    mutationFn: (target: string) => api.post<void>('/maintenance/test-notify', { target }),
   });
 }
